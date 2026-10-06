@@ -1,0 +1,308 @@
+diff --git a/app/src/main/java/com/luigiscialpi/colorfilter/domain/ColorTransform.kt b/app/src/main/java/com/luigiscialpi/colorfilter/domain/ColorTransform.kt
+new file mode 100644
+index 0000000..45d11a2
+--- /dev/null
++++ b/app/src/main/java/com/luigiscialpi/colorfilter/domain/ColorTransform.kt
+@@ -0,0 +1,71 @@
++package com.luigiscialpi.colorfilter.domain
++
++import java.util.Locale
++import kotlin.math.abs
++
++/**
++ * Matrice colore 3x3 immutabile.
++ *
++ * Ogni riga esprime un canale di uscita (R', G', B') in funzione dei canali di
++ * ingresso (R, G, B). Il tipo non dipende da Android: sa solo produrre gli argomenti
++ * numerici che SurfaceFlinger si aspetta (vedi [toSurfaceFlingerArgs]).
++ */
++class ColorTransform(rows: List<List<Double>>) {
++
++    private val values: List<Double>
++
++    init {
++        require(rows.size == SIZE && rows.all { it.size == SIZE }) { "La matrice deve essere 3x3" }
++        val flat = rows.flatten()
++        require(flat.all { it.isFinite() }) { "I coefficienti devono essere numeri finiti" }
++        // `+ 0.0` converte -0.0 in 0.0: uguaglianza e formattazione restano stabili.
++        values = flat.map { it + 0.0 }
++    }
++
++    /** Coefficiente alla riga [row] (canale di uscita) e colonna [col] (canale di ingresso). */
++    operator fun get(row: Int, col: Int): Double {
++        require(row in 0 until SIZE && col in 0 until SIZE) { "Indici fuori intervallo: ($row, $col)" }
++        return values[row * SIZE + col]
++    }
++
++    /**
++     * Argomenti float per `service call SurfaceFlinger 1015 i32 1 <argomenti>`.
++     *
++     * SurfaceFlinger legge una mat4 in ordine column-major e richiede l'ultima riga
++     * (0, 0, 0, 1). I numeri usano sempre il punto decimale, indipendentemente dal locale.
++     */
++    fun toSurfaceFlingerArgs(): String {
++        val mat4 = mutableListOf<Double>()
++        for (col in 0 until SIZE) {
++            for (row in 0 until SIZE) mat4.add(this[row, col])
++            mat4.add(0.0)
++        }
++        mat4.addAll(listOf(0.0, 0.0, 0.0, 1.0))
++        return mat4.joinToString(" ") { "f ${format(it)}" }
++    }
++
++    override fun equals(other: Any?): Boolean = other is ColorTransform && values == other.values
++
++    override fun hashCode(): Int = values.hashCode()
++
++    override fun toString(): String = "ColorTransform($values)"
++
++    private fun format(value: Double): String {
++        // Un valore che si arrotonda a zero viene scritto "0.000000", mai "-0.000000".
++        val safe = if (abs(value) < HALF_LAST_DIGIT) 0.0 else value
++        return String.format(Locale.ROOT, "%.6f", safe)
++    }
++
++    companion object {
++        private const val SIZE = 3
++        private const val HALF_LAST_DIGIT = 0.5e-6
++
++        val IDENTITY = ColorTransform(
++            listOf(
++                listOf(1.0, 0.0, 0.0),
++                listOf(0.0, 1.0, 0.0),
++                listOf(0.0, 0.0, 1.0),
++            ),
++        )
++    }
++}
+diff --git a/app/src/main/java/com/luigiscialpi/colorfilter/domain/LuminanceShiftFilter.kt b/app/src/main/java/com/luigiscialpi/colorfilter/domain/LuminanceShiftFilter.kt
+new file mode 100644
+index 0000000..9b4fbd3
+--- /dev/null
++++ b/app/src/main/java/com/luigiscialpi/colorfilter/domain/LuminanceShiftFilter.kt
+@@ -0,0 +1,27 @@
++package com.luigiscialpi.colorfilter.domain
++
++/**
++ * Variante a luminanza: `C = I + β · 1 · [1, −1, 0]`.
++ *
++ * Aggiunge a tutti e tre i canali una quantità proporzionale a (R − G): i rossi si
++ * schiariscono, i verdi si scuriscono, la tinta cambia poco. Le righe sommano a 1,
++ * quindi i neutri (grigi e bianco) restano invariati.
++ */
++object LuminanceShiftFilter {
++
++    const val MIN_BETA = 0.0
++
++    /** Limite superiore provvisorio: 0.5 è l'intensità giudicata troppo forte nelle prove. */
++    const val MAX_BETA = 0.5
++
++    fun transform(beta: Double): ColorTransform {
++        require(beta in MIN_BETA..MAX_BETA) { "beta deve essere in [$MIN_BETA, $MAX_BETA]: $beta" }
++        return ColorTransform(
++            listOf(
++                listOf(1 + beta, -beta, 0.0),
++                listOf(beta, 1 - beta, 0.0),
++                listOf(beta, -beta, 1.0),
++            ),
++        )
++    }
++}
+diff --git a/app/src/test/java/com/luigiscialpi/colorfilter/domain/ColorTransformTest.kt b/app/src/test/java/com/luigiscialpi/colorfilter/domain/ColorTransformTest.kt
+new file mode 100644
+index 0000000..6f59768
+--- /dev/null
++++ b/app/src/test/java/com/luigiscialpi/colorfilter/domain/ColorTransformTest.kt
+@@ -0,0 +1,122 @@
++package com.luigiscialpi.colorfilter.domain
++
++import java.util.Locale
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertThrows
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class ColorTransformTest {
++
++    private fun values(transform: ColorTransform): List<Double> =
++        transform.toSurfaceFlingerArgs().split(" ").chunked(2).map { it[1].toDouble() }
++
++    @Test
++    fun identitaProduceLaMatriceIdentita() {
++        val expected = "f 1.000000 f 0.000000 f 0.000000 f 0.000000 " +
++            "f 0.000000 f 1.000000 f 0.000000 f 0.000000 " +
++            "f 0.000000 f 0.000000 f 1.000000 f 0.000000 " +
++            "f 0.000000 f 0.000000 f 0.000000 f 1.000000"
++        assertEquals(expected, ColorTransform.IDENTITY.toSurfaceFlingerArgs())
++    }
++
++    @Test
++    fun matriceAsimmetricaViaggiaPerColonne() {
++        // R' = G, G' = G, B' = B: e' il test `asym` eseguito sul dispositivo.
++        val asym = ColorTransform(
++            listOf(
++                listOf(0.0, 1.0, 0.0),
++                listOf(0.0, 1.0, 0.0),
++                listOf(0.0, 0.0, 1.0),
++            ),
++        )
++        val expected = "f 0.000000 f 0.000000 f 0.000000 f 0.000000 " +
++            "f 1.000000 f 1.000000 f 0.000000 f 0.000000 " +
++            "f 0.000000 f 0.000000 f 1.000000 f 0.000000 " +
++            "f 0.000000 f 0.000000 f 0.000000 f 1.000000"
++        assertEquals(expected, asym.toSurfaceFlingerArgs())
++    }
++
++    @Test
++    fun produceSedicivaloriConUltimaRigaZeroZeroZeroUno() {
++        val transform = ColorTransform(
++            listOf(
++                listOf(1.3, -0.3, 0.0),
++                listOf(0.3, 0.7, 0.0),
++                listOf(0.3, -0.3, 1.0),
++            ),
++        )
++        val v = values(transform)
++        assertEquals(16, v.size)
++        assertEquals(listOf(0.0, 0.0, 0.0, 1.0), listOf(v[3], v[7], v[11], v[15]))
++    }
++
++    @Test
++    fun laFormattazioneNonDipendeDalLocalePredefinito() {
++        val previous = Locale.getDefault()
++        try {
++            Locale.setDefault(Locale.ITALY)
++            val transform = ColorTransform(
++                listOf(
++                    listOf(1.15, -0.15, 0.0),
++                    listOf(0.15, 0.85, 0.0),
++                    listOf(0.15, -0.15, 1.0),
++                ),
++            )
++            val args = transform.toSurfaceFlingerArgs()
++            assertFalse(args.contains(','))
++            assertTrue(args.contains("f 1.150000"))
++        } finally {
++            Locale.setDefault(previous)
++        }
++    }
++
++    @Test
++    fun nonScriveMaiZeroNegativo() {
++        val transform = ColorTransform(
++            listOf(
++                listOf(1.0, -0.0, -1e-9),
++                listOf(0.0, 1.0, 0.0),
++                listOf(0.0, 0.0, 1.0),
++            ),
++        )
++        assertFalse(transform.toSurfaceFlingerArgs().contains("-0.000000"))
++    }
++
++    @Test
++    fun menoZeroEZeroSonoUguali() {
++        val withNegativeZero = ColorTransform(
++            listOf(listOf(1.0, -0.0, 0.0), listOf(0.0, 1.0, 0.0), listOf(0.0, 0.0, 1.0)),
++        )
++        assertEquals(ColorTransform.IDENTITY, withNegativeZero)
++        assertEquals(ColorTransform.IDENTITY.hashCode(), withNegativeZero.hashCode())
++    }
++
++    @Test
++    fun rifiutaMatriciNonTrePerTre() {
++        assertThrows(IllegalArgumentException::class.java) {
++            ColorTransform(listOf(listOf(1.0, 0.0), listOf(0.0, 1.0)))
++        }
++        assertThrows(IllegalArgumentException::class.java) {
++            ColorTransform(listOf(listOf(1.0, 0.0, 0.0), listOf(0.0, 1.0, 0.0)))
++        }
++    }
++
++    @Test
++    fun rifiutaCoefficientiNonFiniti() {
++        for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
++            assertThrows(IllegalArgumentException::class.java) {
++                ColorTransform(
++                    listOf(listOf(bad, 0.0, 0.0), listOf(0.0, 1.0, 0.0), listOf(0.0, 0.0, 1.0)),
++                )
++            }
++        }
++    }
++
++    @Test
++    fun getRifiutaIndiciFuoriIntervallo() {
++        assertThrows(IllegalArgumentException::class.java) { ColorTransform.IDENTITY[3, 0] }
++        assertThrows(IllegalArgumentException::class.java) { ColorTransform.IDENTITY[0, -1] }
++    }
++}
+diff --git a/app/src/test/java/com/luigiscialpi/colorfilter/domain/LuminanceShiftFilterTest.kt b/app/src/test/java/com/luigiscialpi/colorfilter/domain/LuminanceShiftFilterTest.kt
+new file mode 100644
+index 0000000..56cdbe7
+--- /dev/null
++++ b/app/src/test/java/com/luigiscialpi/colorfilter/domain/LuminanceShiftFilterTest.kt
+@@ -0,0 +1,64 @@
++package com.luigiscialpi.colorfilter.domain
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertThrows
++import org.junit.Test
++
++class LuminanceShiftFilterTest {
++
++    @Test
++    fun conBetaZeroLaMatriceEIdentita() {
++        assertEquals(ColorTransform.IDENTITY, LuminanceShiftFilter.transform(0.0))
++        assertEquals(
++            ColorTransform.IDENTITY.toSurfaceFlingerArgs(),
++            LuminanceShiftFilter.transform(0.0).toSurfaceFlingerArgs(),
++        )
++    }
++
++    @Test
++    fun ogniRigaSommaAUnoQuindiINeutriRestanoInvariati() {
++        for (beta in listOf(0.0, 0.15, 0.3, 0.5)) {
++            val t = LuminanceShiftFilter.transform(beta)
++            for (row in 0..2) {
++                val sum = (0..2).sumOf { col -> t[row, col] }
++                assertEquals("beta=$beta riga=$row", 1.0, sum, 1e-12)
++            }
++        }
++    }
++
++    @Test
++    fun conBeta015LaSequenzaCoincideConQuellaProvataSulDispositivo() {
++        val expected = "f 1.150000 f 0.150000 f 0.150000 f 0.000000 " +
++            "f -0.150000 f 0.850000 f -0.150000 f 0.000000 " +
++            "f 0.000000 f 0.000000 f 1.000000 f 0.000000 " +
++            "f 0.000000 f 0.000000 f 0.000000 f 1.000000"
++        assertEquals(expected, LuminanceShiftFilter.transform(0.15).toSurfaceFlingerArgs())
++    }
++
++    @Test
++    fun ilRossoPuroSiSchiaraEIlVerdePuroSiScurisce() {
++        val t = LuminanceShiftFilter.transform(0.3)
++        // Colonna 0 = effetto di R in ingresso: R' = 1.3, G' = 0.3, B' = 0.3.
++        assertEquals(1.3, t[0, 0], 1e-12)
++        assertEquals(0.3, t[1, 0], 1e-12)
++        assertEquals(0.3, t[2, 0], 1e-12)
++        // Colonna 1 = effetto di G in ingresso: R' = -0.3, G' = 0.7, B' = -0.3.
++        assertEquals(-0.3, t[0, 1], 1e-12)
++        assertEquals(0.7, t[1, 1], 1e-12)
++        assertEquals(-0.3, t[2, 1], 1e-12)
++    }
++
++    @Test
++    fun accettaGliEstremiDellIntervallo() {
++        LuminanceShiftFilter.transform(LuminanceShiftFilter.MIN_BETA)
++        LuminanceShiftFilter.transform(LuminanceShiftFilter.MAX_BETA)
++    }
++
++    @Test
++    fun rifiutaBetaFuoriIntervalloONonFinito() {
++        val bad = listOf(-0.01, 0.51, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)
++        for (beta in bad) {
++            assertThrows(IllegalArgumentException::class.java) { LuminanceShiftFilter.transform(beta) }
++        }
++    }
++}
