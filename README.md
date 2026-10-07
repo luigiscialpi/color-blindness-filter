@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 4** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura e il completamento del primo branch. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 5** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il completamento del primo branch e il comportamento osservato di `service call`. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -86,7 +86,7 @@ service call SurfaceFlinger 1015 i32 1 <16 valori float>
 service call SurfaceFlinger 1015 i32 0        # ripristino
 ```
 
-La matrice viene inviata in ordine **column-major** e l'ultima riga deve essere (0, 0, 0, 1), altrimenti SurfaceFlinger la rifiuta. Per una matrice 3x3 `C` (righe R', G', B' espresse in funzione di R, G, B) la sequenza è: colonna 0 (`C00, C10, C20, 0`), colonna 1, colonna 2, poi `0, 0, 0, 1`.
+La matrice viene inviata in ordine **column-major** e l'ultima riga deve essere (0, 0, 0, 1); in caso contrario il comando non segnala alcun errore (vedi *Cosa resta non verificato*). Per una matrice 3x3 `C` (righe R', G', B' espresse in funzione di R, G, B) la sequenza è: colonna 0 (`C00, C10, C20, 0`), colonna 1, colonna 2, poi `0, 0, 0, 1`.
 
 Esempio: la matrice con `R' = G`, `G' = G`, `B' = B` si invia come `f 0 f 0 f 0 f 0 f 1 f 1 f 0 f 0 f 0 f 0 f 1 f 0 f 0 f 0 f 0 f 1`. Applicata a un rosso puro lo rende nero se la matrice è letta per colonne, verde se è letta per righe: è il test `asym` eseguito sul dispositivo.
 
@@ -178,6 +178,7 @@ La tabella riporta le prove eseguite e il loro esito, nell'ordine in cui sono st
 | Persistenza dopo toggle Night Light | La matrice resta |
 | Copertura di tastiera e barra di stato | Sembrano filtrate (impressione soggettiva) |
 | Test di Ishihara (riferito dall'utente) | Circa la metà delle tavole viste; non quantifica la gravità (vedi *Misura oggettiva della condizione*) |
+| Esito di `service call` con matrice valida e non valida | In entrambi i casi `Result: Parcel(NULL)` e codice di uscita 0: il comando non segnala se la matrice è stata accettata |
 
 ### Cosa resta non verificato
 
@@ -187,6 +188,7 @@ La tabella riporta le prove eseguite e il loro esito, nell'ordine in cui sono st
 - **Efficacia su compiti.** Finora solo impressioni soggettive; nessuna misura di errori o tempi.
 - **Confronto con la correzione nativa** di Android sul campo. TO DO.
 - **Verifica clinica** (anomaloscopio). TO DO.
+- **Conferma dell'applicazione.** `service call` risponde `Parcel(NULL)` con codice di uscita 0 anche con una matrice non valida, quindi l'esito del comando non prova che la matrice sia stata applicata. La validità va garantita dal dominio (ultima riga fissa, `β` limitato). Da approfondire.
 
 ### Riferimenti tecnici consultati
 
@@ -315,8 +317,10 @@ Struttura del codice, con package `com.luigiscialpi.colorblindnessfilter` (repos
    1. `ColorTransform`: matrice 3x3 immutabile con `toSurfaceFlingerArgs()`, che produce i 16 valori column-major con ultima riga (0,0,0,1) e formattazione `Locale.ROOT` (`domain/ColorTransform.kt`).
    2. `LuminanceShiftFilter`: dato `β`, restituisce il `ColorTransform` con `C = I + β·1·[1, −1, 0]` (`domain/LuminanceShiftFilter.kt`).
 2. **Applicazione al sistema**
-   1. Interfaccia `ScreenColorApplier` con `apply(transform)` e `reset()`, e `sealed interface ApplyResult` (`system/ScreenColorApplier.kt`, proposto).
-   2. `SurfaceFlingerColorApplier`: invia `service call SurfaceFlinger 1015 …` tramite shell root; ripristino con `i32 0` (`system/SurfaceFlingerColorApplier.kt`, proposto). Dipendenza consigliata per la shell root: `libsu` (Da approfondire: versione e licenza).
+   1. Interfaccia `ScreenColorApplier` con `apply(transform)` e `reset()`, e `sealed interface ApplyResult` (`system/ScreenColorApplier.kt`).
+   2. Interfaccia `RootShell` con `isRootAvailable()` e `run(command)`, e `ShellResult` (`system/RootShell.kt`).
+   3. `SurfaceFlingerColorApplier`: invia `service call SurfaceFlinger 1015 …` tramite `RootShell`; ripristino con `i32 0`. `Success` indica che il comando è stato eseguito e ha risposto con un `Parcel`, non che la matrice sia stata applicata (`system/SurfaceFlingerColorApplier.kt`).
+   4. `LibsuRootShell`: adattatore di `RootShell` sopra `libsu` 6.0.0 (versione indicata dal README del progetto, licenza Apache-2.0, distribuita tramite JitPack) (`system/LibsuRootShell.kt`).
 3. **Persistenza**
    1. `FilterSettings` (`enabled: Boolean`, `intensity: Float`) e `SettingsRepository` su DataStore Preferences (`data/`, proposto).
 4. **Orchestrazione**
@@ -345,8 +349,9 @@ La suddivisione in branch segue la convenzione `feature/nome-scopo`. Esempio: `f
    3. Scrivere gli unit test del dominio.
 2. `feature/screen-color-applier`
    1. Definire `ScreenColorApplier` e `ApplyResult`.
-   2. Implementare `SurfaceFlingerColorApplier` con shell root.
+   2. Implementare `SurfaceFlingerColorApplier` sopra l'interfaccia `RootShell`.
    3. Scrivere i test con una shell finta (comando atteso, reset, errore).
+   4. Implementare `LibsuRootShell` e aggiungere `libsu` (repository JitPack limitato al suo gruppo).
 3. `feature/settings-controller`
    1. Implementare `FilterSettings` e `SettingsRepository` su DataStore.
    2. Implementare `FilterController` e i relativi test.
@@ -369,9 +374,9 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 - [x] Unit test del dominio (identità, somma righe, column-major, ultima riga, golden β 0.15, locale)
 
 `feature/screen-color-applier`
-- [ ] `ScreenColorApplier` e `ApplyResult`
-- [ ] `SurfaceFlingerColorApplier` via root
-- [ ] Test con shell finta
+- [x] `ScreenColorApplier` e `ApplyResult`
+- [ ] `SurfaceFlingerColorApplier` via root (adattatore `libsu` da verificare sul dispositivo)
+- [x] Test con shell finta
 
 `feature/settings-controller`
 - [ ] `SettingsRepository` su DataStore
@@ -394,6 +399,8 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/domain/LuminanceShiftFilter.kt`: nuovo, calcolo della matrice a luminanza
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/ScreenColorApplier.kt`: nuovo, interfaccia e `ApplyResult`
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/SurfaceFlingerColorApplier.kt`: nuovo, invio via shell root
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/RootShell.kt`: nuovo, interfaccia della shell root e `ShellResult`
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/LibsuRootShell.kt`: nuovo, adattatore `libsu`
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/FilterSettings.kt`: nuovo, impostazioni immutabili
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/SettingsRepository.kt`: nuovo, DataStore Preferences
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/FilterController.kt`: nuovo, orchestrazione
