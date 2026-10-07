@@ -1,4 +1,4 @@
-package com.luigiscialpi.colorfilter.domain
+package com.luigiscialpi.colorblindnessfilter.domain
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows

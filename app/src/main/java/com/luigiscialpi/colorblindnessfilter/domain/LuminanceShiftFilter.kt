@@ -1,4 +1,4 @@
-package com.luigiscialpi.colorfilter.domain
+package com.luigiscialpi.colorblindnessfilter.domain
 
 /**
  * Variante a luminanza: `C = I + β · 1 · [1, −1, 0]`.

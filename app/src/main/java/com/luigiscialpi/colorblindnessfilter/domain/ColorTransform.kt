@@ -1,4 +1,4 @@
-package com.luigiscialpi.colorfilter.domain
+package com.luigiscialpi.colorblindnessfilter.domain
 
 import java.util.Locale
 import kotlin.math.abs

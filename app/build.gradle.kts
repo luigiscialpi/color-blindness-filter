@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.luigiscialpi.colorfilter"
+    namespace = "com.luigiscialpi.colorblindnessfilter"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.luigiscialpi.colorfilter"
+        applicationId = "com.luigiscialpi.colorblindnessfilter"
         minSdk = 31
         targetSdk = 36
         versionCode = 1

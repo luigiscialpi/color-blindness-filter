@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "colorfilter"
+rootProject.name = "color-blindness-filter"
 include(":app")
