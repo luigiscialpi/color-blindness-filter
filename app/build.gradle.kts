@@ -30,5 +30,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.libsu.core)
+
     testImplementation(libs.junit)
 }
