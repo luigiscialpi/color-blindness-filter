@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 3** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot e la ricerca sugli strumenti di misura. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 4** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura e il completamento del primo branch. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -309,11 +309,11 @@ Criterio di successo: il filtro personalizzato riduce errori e tempi rispetto al
 
 ### Rationale
 
-Struttura proposta, dato che la repository non esiste ancora; i nomi sono provvisori (`<pkg>` indica il package da scegliere).
+Struttura del codice, con package `com.luigiscialpi.colorblindnessfilter` (repository: https://github.com/luigiscialpi/color-blindness-filter). I file del primo branch sono già presenti; i nomi degli altri sono proposti e vanno confermati branch per branch.
 
 1. **Dominio** (Kotlin puro)
-   1. `ColorTransform`: matrice 3x3 immutabile con `toSurfaceFlingerArgs()`, che produce i 16 valori column-major con ultima riga (0,0,0,1) e formattazione `Locale.ROOT` (`domain/ColorTransform.kt`, proposto).
-   2. `LuminanceShiftFilter`: dato `β`, restituisce il `ColorTransform` con `C = I + β·1·[1, −1, 0]` (`domain/LuminanceShiftFilter.kt`, proposto).
+   1. `ColorTransform`: matrice 3x3 immutabile con `toSurfaceFlingerArgs()`, che produce i 16 valori column-major con ultima riga (0,0,0,1) e formattazione `Locale.ROOT` (`domain/ColorTransform.kt`).
+   2. `LuminanceShiftFilter`: dato `β`, restituisce il `ColorTransform` con `C = I + β·1·[1, −1, 0]` (`domain/LuminanceShiftFilter.kt`).
 2. **Applicazione al sistema**
    1. Interfaccia `ScreenColorApplier` con `apply(transform)` e `reset()`, e `sealed interface ApplyResult` (`system/ScreenColorApplier.kt`, proposto).
    2. `SurfaceFlingerColorApplier`: invia `service call SurfaceFlinger 1015 …` tramite shell root; ripristino con `i32 0` (`system/SurfaceFlingerColorApplier.kt`, proposto). Dipendenza consigliata per la shell root: `libsu` (Da approfondire: versione e licenza).
@@ -340,7 +340,7 @@ Struttura proposta, dato che la repository non esiste ancora; i nomi sono provvi
 La suddivisione in branch segue la convenzione `feature/nome-scopo`. Esempio: `feature/domain-color-transform`.
 
 1. `feature/domain-color-transform`
-   1. Creare il progetto Android (Kotlin, Compose) con un solo modulo `app`.
+   1. Creare il progetto Android (Kotlin, senza Compose finché non serve) con un solo modulo `app`.
    2. Implementare `ColorTransform` e `LuminanceShiftFilter`.
    3. Scrivere gli unit test del dominio.
 2. `feature/screen-color-applier`
@@ -363,10 +363,10 @@ La suddivisione in branch segue la convenzione `feature/nome-scopo`. Esempio: `f
 Lo stesso piano come tracker di avanzamento, branch per branch.
 
 `feature/domain-color-transform`
-- [ ] Progetto Android creato (modulo unico `app`)
-- [ ] `ColorTransform` con `toSurfaceFlingerArgs()`
-- [ ] `LuminanceShiftFilter`
-- [ ] Unit test del dominio (identità, somma righe, column-major, ultima riga, golden β 0.15, locale)
+- [x] Progetto Android creato (modulo unico `app`)
+- [x] `ColorTransform` con `toSurfaceFlingerArgs()`
+- [x] `LuminanceShiftFilter`
+- [x] Unit test del dominio (identità, somma righe, column-major, ultima riga, golden β 0.15, locale)
 
 `feature/screen-color-applier`
 - [ ] `ScreenColorApplier` e `ApplyResult`
@@ -388,23 +388,23 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 
 ## Elenco file impattati
 
-TO DO: la repository non esiste ancora. Elenco proposto dei file da creare, da riallineare ai nomi reali una volta scelto il package.
+Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relativi test sono già presenti; gli altri sono proposti e vanno confermati branch per branch.
 
-- `app/src/main/java/<pkg>/domain/ColorTransform.kt`: nuovo, matrice immutabile e argomenti del comando
-- `app/src/main/java/<pkg>/domain/LuminanceShiftFilter.kt`: nuovo, calcolo della matrice a luminanza
-- `app/src/main/java/<pkg>/system/ScreenColorApplier.kt`: nuovo, interfaccia e `ApplyResult`
-- `app/src/main/java/<pkg>/system/SurfaceFlingerColorApplier.kt`: nuovo, invio via shell root
-- `app/src/main/java/<pkg>/data/FilterSettings.kt`: nuovo, impostazioni immutabili
-- `app/src/main/java/<pkg>/data/SettingsRepository.kt`: nuovo, DataStore Preferences
-- `app/src/main/java/<pkg>/FilterController.kt`: nuovo, orchestrazione
-- `app/src/main/java/<pkg>/ui/FilterViewModel.kt`: nuovo, stato della UI
-- `app/src/main/java/<pkg>/ui/FilterScreen.kt`: nuovo, schermata Compose
-- `app/src/main/java/<pkg>/ui/MainActivity.kt`: nuovo, host della schermata
-- `app/src/main/java/<pkg>/system/BootScriptWriter.kt`: nuovo, script `service.d` di Magisk
-- `app/src/test/java/<pkg>/domain/ColorTransformTest.kt`: nuovo, test del dominio
-- `app/src/test/java/<pkg>/domain/LuminanceShiftFilterTest.kt`: nuovo, test del dominio
-- `app/src/test/java/<pkg>/system/SurfaceFlingerColorApplierTest.kt`: nuovo, test con shell finta
-- `app/src/test/java/<pkg>/system/BootScriptWriterTest.kt`: nuovo, test con directory temporanea
-- `app/src/test/java/<pkg>/FilterControllerTest.kt`: nuovo, test del controller
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/domain/ColorTransform.kt`: nuovo, matrice immutabile e argomenti del comando
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/domain/LuminanceShiftFilter.kt`: nuovo, calcolo della matrice a luminanza
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/ScreenColorApplier.kt`: nuovo, interfaccia e `ApplyResult`
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/SurfaceFlingerColorApplier.kt`: nuovo, invio via shell root
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/FilterSettings.kt`: nuovo, impostazioni immutabili
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/SettingsRepository.kt`: nuovo, DataStore Preferences
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/FilterController.kt`: nuovo, orchestrazione
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterViewModel.kt`: nuovo, stato della UI
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterScreen.kt`: nuovo, schermata Compose
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/MainActivity.kt`: nuovo, host della schermata
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/BootScriptWriter.kt`: nuovo, script `service.d` di Magisk
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/domain/ColorTransformTest.kt`: nuovo, test del dominio
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/domain/LuminanceShiftFilterTest.kt`: nuovo, test del dominio
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/system/SurfaceFlingerColorApplierTest.kt`: nuovo, test con shell finta
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/system/BootScriptWriterTest.kt`: nuovo, test con directory temporanea
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/FilterControllerTest.kt`: nuovo, test del controller
 - `app/src/main/AndroidManifest.xml`: nuovo, dichiarazione di applicazione e activity (con l'alternativa B non serve alcun permesso di boot)
 - `app/build.gradle.kts`: nuovo, dipendenze (Compose, DataStore, `libsu`)
