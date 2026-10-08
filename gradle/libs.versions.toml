@@ -4,12 +4,19 @@ kotlin = "2.2.20"
 junit = "4.13.2"
 libsu = "6.0.0"
 datastore = "1.2.1"
+composeBom = "2025.10.01"
+activityCompose = "1.13.0"
 
 [libraries]
 junit = { module = "junit:junit", version.ref = "junit" }
 libsu-core = { module = "com.github.topjohnwu.libsu:core", version.ref = "libsu" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
