@@ -30,6 +30,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.libsu.core)
 
     testImplementation(libs.junit)
