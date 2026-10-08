@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 5** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il completamento del primo branch e il comportamento osservato di `service call`. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 6** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call` e l'avanzamento dei primi tre branch. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -322,9 +322,10 @@ Struttura del codice, con package `com.luigiscialpi.colorblindnessfilter` (repos
    3. `SurfaceFlingerColorApplier`: invia `service call SurfaceFlinger 1015 …` tramite `RootShell`; ripristino con `i32 0`. `Success` indica che il comando è stato eseguito e ha risposto con un `Parcel`, non che la matrice sia stata applicata (`system/SurfaceFlingerColorApplier.kt`).
    4. `LibsuRootShell`: adattatore di `RootShell` sopra `libsu` 6.0.0 (versione indicata dal README del progetto, licenza Apache-2.0, distribuita tramite JitPack) (`system/LibsuRootShell.kt`).
 3. **Persistenza**
-   1. `FilterSettings` (`enabled: Boolean`, `intensity: Float`) e `SettingsRepository` su DataStore Preferences (`data/`, proposto).
+   1. `FilterSettings` (`enabled: Boolean`, `intensity: Double`): valida l'intervallo dell'intensità e ha come valori iniziali filtro spento e intensità 0.15 (`data/FilterSettings.kt`).
+   2. `SettingsRepository` su DataStore Preferences, con `Flow<FilterSettings>` e le funzioni `setEnabled` e `setIntensity`; il legame con il `Context` sta in un file a parte (`data/SettingsRepository.kt`, `data/FilterDataStore.kt`).
 4. **Orchestrazione**
-   1. `FilterController`: osserva le impostazioni, calcola il `ColorTransform`, chiama l'applier; unico punto condiviso da UI e boot (`FilterController.kt`, proposto).
+   1. `FilterController`: dato un `FilterSettings`, applica la matrice (filtro acceso) o ripristina i colori (filtro spento) tramite l'applier. È sincrono e senza coroutine, quindi si testa con un applier finta; l'osservazione delle impostazioni e il cambio di thread restano nel ViewModel (`FilterController.kt`).
 5. **Interfaccia**
    1. `FilterViewModel` con `StateFlow` e `FilterScreen` in Compose con interruttore e slider (`ui/`, proposto).
 6. **Boot**
@@ -336,8 +337,10 @@ Struttura del codice, con package `com.luigiscialpi.colorblindnessfilter` (repos
    4. L'ultima riga è (0, 0, 0, 1).
    5. Con `β = 0.15` la sequenza coincide con quella riportata in *Modello della percezione e variante a luminanza*.
    6. Con locale predefinito italiano, la formattazione usa il punto decimale.
-   7. `FilterController`: attivare applica, disattivare ripristina, un errore dell'applier si riflette nello stato.
+   7. `FilterController`: acceso applica la matrice dell'intensità scelta, spento ripristina, l'esito dell'applier viene restituito invariato.
    8. `BootScriptWriter`: lo script contiene il comando atteso con il punto decimale, la scrittura è atomica e il filtro disattivato rimuove lo script.
+   9. `FilterSettings`: valori iniziali, intervallo valido, rifiuto di `NaN` e di valori infiniti.
+   10. `SettingsRepository`: valori iniziali, persistenza di acceso e intensità, rifiuto dell'intensità fuori intervallo, ripiego su valori memorizzati non validi.
 
 ### Implementazione
 
@@ -353,8 +356,8 @@ La suddivisione in branch segue la convenzione `feature/nome-scopo`. Esempio: `f
    3. Scrivere i test con una shell finta (comando atteso, reset, errore).
    4. Implementare `LibsuRootShell` e aggiungere `libsu` (repository JitPack limitato al suo gruppo).
 3. `feature/settings-controller`
-   1. Implementare `FilterSettings` e `SettingsRepository` su DataStore.
-   2. Implementare `FilterController` e i relativi test.
+   1. Implementare `FilterSettings` e `FilterController` con i relativi test.
+   2. Implementare `SettingsRepository` su DataStore con i relativi test (dipendenza `datastore-preferences` e `android.useAndroidX=true`).
 4. `feature/main-screen`
    1. Implementare `FilterViewModel` e `FilterScreen`.
    2. Mostrare lo stato "root non disponibile".
@@ -379,8 +382,8 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 - [x] Test con shell finta
 
 `feature/settings-controller`
-- [ ] `SettingsRepository` su DataStore
-- [ ] `FilterController` e relativi test
+- [ ] `SettingsRepository` su DataStore (da verificare con la build)
+- [x] `FilterController` e relativi test
 
 `feature/main-screen`
 - [ ] `FilterViewModel` e `FilterScreen`
@@ -403,6 +406,7 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/LibsuRootShell.kt`: nuovo, adattatore `libsu`
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/FilterSettings.kt`: nuovo, impostazioni immutabili
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/SettingsRepository.kt`: nuovo, DataStore Preferences
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/FilterDataStore.kt`: nuovo, legame del DataStore con il `Context`
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/FilterController.kt`: nuovo, orchestrazione
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterViewModel.kt`: nuovo, stato della UI
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterScreen.kt`: nuovo, schermata Compose
@@ -413,5 +417,7 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/system/SurfaceFlingerColorApplierTest.kt`: nuovo, test con shell finta
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/system/BootScriptWriterTest.kt`: nuovo, test con directory temporanea
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/FilterControllerTest.kt`: nuovo, test del controller
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/FilterSettingsTest.kt`: nuovo, test delle impostazioni
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/SettingsRepositoryTest.kt`: nuovo, test della persistenza
 - `app/src/main/AndroidManifest.xml`: nuovo, dichiarazione di applicazione e activity (con l'alternativa B non serve alcun permesso di boot)
 - `app/build.gradle.kts`: nuovo, dipendenze (Compose, DataStore, `libsu`)
