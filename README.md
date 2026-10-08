@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 6** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call` e l'avanzamento dei primi tre branch. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 7** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3 e la scrittura della UI. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -242,6 +242,8 @@ Regole operative collegate ai principi:
 - Formattare i float con `Locale.ROOT`. Con il locale italiano `0.15` diventerebbe `0,15` e il comando fallirebbe.
 - Una responsabilità per branch; commit piccoli (esempio: `feat(domain): aggiungere LuminanceShiftFilter`).
 - Definizione di completato: unit test verdi, nessun `TODO` non tracciato in questo documento, nessun codice per requisiti non presenti qui.
+- Le semplificazioni intenzionali sono marcate nel codice con un commento `ponytail:` che indica il limite accettato e come superarlo.
+- In interfaccia il colore non è mai l'unica informazione: ogni indicazione ha anche un testo.
 
 ## Idee di sviluppo
 
@@ -327,7 +329,10 @@ Struttura del codice, con package `com.luigiscialpi.colorblindnessfilter` (repos
 4. **Orchestrazione**
    1. `FilterController`: dato un `FilterSettings`, applica la matrice (filtro acceso) o ripristina i colori (filtro spento) tramite l'applier. È sincrono e senza coroutine, quindi si testa con un applier finta; l'osservazione delle impostazioni e il cambio di thread restano nel ViewModel (`FilterController.kt`).
 5. **Interfaccia**
-   1. `FilterViewModel` con `StateFlow` e `FilterScreen` in Compose con interruttore e slider (`ui/`, proposto).
+   1. `FilterUiState`: impostazioni correnti ed esito dell'ultima applicazione (`ui/FilterUiState.kt`).
+   2. `FilterViewModel` con `StateFlow`: una coda che conserva solo l'ultima richiesta esegue in ordine le chiamate root bloccanti, per l'anteprima dal vivo durante il trascinamento dello slider; il salvataggio avviene a fine trascinamento (`ui/FilterViewModel.kt`).
+   3. `FilterScreen` in Compose: interruttore, slider di intensità a passi di 0.01, tre campioni di riferimento (rosso, verde, grigio) filtrati insieme allo schermo e messaggi di stato in testo (`ui/FilterScreen.kt`).
+   4. `MainActivity`: cablaggio manuale delle dipendenze e colori dinamici (`ui/MainActivity.kt`).
 6. **Boot**
    1. `BootScriptWriter`: genera e rimuove lo script `service.d` di Magisk a partire dalla matrice corrente (`system/BootScriptWriter.kt`, proposto).
 7. **Test** (unit test del dominio e del controller)
@@ -359,8 +364,9 @@ La suddivisione in branch segue la convenzione `feature/nome-scopo`. Esempio: `f
    1. Implementare `FilterSettings` e `FilterController` con i relativi test.
    2. Implementare `SettingsRepository` su DataStore con i relativi test (dipendenza `datastore-preferences` e `android.useAndroidX=true`).
 4. `feature/main-screen`
-   1. Implementare `FilterViewModel` e `FilterScreen`.
-   2. Mostrare lo stato "root non disponibile".
+   1. Aggiungere il plugin Compose e le dipendenze (BOM, `activity-compose`, `material3`, `ui`).
+   2. Implementare `FilterViewModel` e `FilterScreen`, con `MainActivity` e tema di piattaforma.
+   3. Mostrare lo stato "root non disponibile".
 5. `feature/magisk-boot-script`
    1. Implementare `BootScriptWriter` (generazione atomica e rimozione dello script).
    2. Scrivere i test con directory temporanea.
@@ -382,12 +388,13 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 - [x] Test con shell finta
 
 `feature/settings-controller`
-- [ ] `SettingsRepository` su DataStore (da verificare con la build)
+- [x] `SettingsRepository` su DataStore
 - [x] `FilterController` e relativi test
 
 `feature/main-screen`
-- [ ] `FilterViewModel` e `FilterScreen`
-- [ ] Stato "root non disponibile"
+- [ ] Plugin Compose e dipendenze Gradle (da verificare con la build)
+- [ ] `FilterViewModel` e `FilterScreen` (scritti, da verificare con build e dispositivo)
+- [ ] Stato "root non disponibile" (scritto, da verificare sul dispositivo)
 
 `feature/magisk-boot-script`
 - [ ] `BootScriptWriter` con scrittura atomica e rimozione
@@ -408,9 +415,12 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/SettingsRepository.kt`: nuovo, DataStore Preferences
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/FilterDataStore.kt`: nuovo, legame del DataStore con il `Context`
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/FilterController.kt`: nuovo, orchestrazione
-- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterViewModel.kt`: nuovo, stato della UI
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterUiState.kt`: nuovo, stato della UI
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterViewModel.kt`: nuovo, logica della schermata
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterScreen.kt`: nuovo, schermata Compose
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/MainActivity.kt`: nuovo, host della schermata
+- `app/src/main/res/values/themes.xml`: nuovo, tema di piattaforma senza barra del titolo
+- `app/src/main/res/values-night/themes.xml`: nuovo, variante scura del tema
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/system/BootScriptWriter.kt`: nuovo, script `service.d` di Magisk
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/domain/ColorTransformTest.kt`: nuovo, test del dominio
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/domain/LuminanceShiftFilterTest.kt`: nuovo, test del dominio
@@ -419,5 +429,5 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/FilterControllerTest.kt`: nuovo, test del controller
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/FilterSettingsTest.kt`: nuovo, test delle impostazioni
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/SettingsRepositoryTest.kt`: nuovo, test della persistenza
-- `app/src/main/AndroidManifest.xml`: nuovo, dichiarazione di applicazione e activity (con l'alternativa B non serve alcun permesso di boot)
+- `app/src/main/AndroidManifest.xml`: dichiarazione di applicazione e `MainActivity` avviabile (con l'alternativa B non serve alcun permesso di boot)
 - `app/build.gradle.kts`: nuovo, dipendenze (Compose, DataStore, `libsu`)
