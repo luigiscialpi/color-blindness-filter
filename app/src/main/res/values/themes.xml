@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema di piattaforma senza barra del titolo: l'interfaccia è tutta in Compose. -->
+    <style name="Theme.ColorBlindnessFilter" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
