@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 8** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI e lo script di avvio. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 9** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -24,6 +24,7 @@ Stato del documento: **DRAFT, versione 8** — aggiornato dopo lo spike A (matri
   - MVP: applicazione e controllo del filtro
   - Riapplicazione al boot
   - Fasi successive (differite)
+  - Misura e taratura personale (differita)
   - Valutazione dell'efficacia
 - Sviluppo
   - Rationale
@@ -138,7 +139,7 @@ Un test a soglie eseguito nell'app ha questi pro e contro.
 La strategia proposta ha tre livelli.
 
 1. **Riferimento clinico.** CAD test o anomaloscopio, una volta, per avere tipo e gravità misurati. TO DO: verificare dove eseguirlo.
-2. **Test a soglie nell'app.** Procedura adattiva (staircase) lungo l'asse rosso-verde, con rumore di luminanza e colori generati dai primari misurati del display. La matrice del filtro va azzerata durante il test. Da approfondire: scelta della procedura adattiva e dell'unità di misura (contrasto dei coni oppure unità standard del CAD).
+2. **Test a soglie nell'app.** Procedura adattiva (staircase) lungo l'asse rosso-verde, con rumore di luminanza e colori generati dai primari misurati del display. La matrice del filtro va azzerata durante il test. Il protocollo ridotto è in *Misura e taratura personale (differita)*: la procedura è lo staircase e l'unità è un indice relativo costruito sul contrasto dei coni.
 3. **Calibrazione e validazione.** Misurare primari e gamma del display con un colorimetro e confrontare la stima dell'app con il riferimento clinico. Con un solo soggetto è un controllo di coerenza, non una validazione statistica.
 
 Nota: poiché il filtro a luminanza agisce proprio sulla luminanza, la valutazione dell'efficacia deve distinguere i compiti risolvibili con la sola luminosità da quelli che richiedono discriminazione cromatica. Il rumore di luminanza del test a soglie misura la sensibilità cromatica indipendentemente dalla luminosità.
@@ -292,12 +293,38 @@ Per rispettare YAGNI, le funzionalità seguenti non fanno parte dell'MVP. Ciascu
 | Quick Settings Tile | Aprire l'app per accendere il filtro risulta scomodo nell'uso quotidiano |
 | Riapplicazione su eventi (sblocco, cambio configurazione) | Si osserva una sovrascrittura reale della matrice |
 | Daltonizzazione classica come secondo modello | La variante a luminanza è insufficiente sui casi reali |
-| Test a soglie nell'app (stile CAD/CCT, display calibrato) | Dopo alcuni giorni d'uso serve stimare i parametri in modo sistematico (vedi *Misura oggettiva della condizione*) |
+| Test a soglie nell'app (stile CAD/CCT, display calibrato) | Dopo alcuni giorni d'uso serve stimare i parametri in modo sistematico (vedi *Misura e taratura personale (differita)*) |
+| Compito in cieco per affinare `β` | Dopo alcuni giorni d'uso si vuole scegliere `β` con un criterio oggettivo (vedi *Misura e taratura personale (differita)*) |
 | Raccolta dei casi reali | Serve un dataset per valutare l'efficacia |
 | Riferimento clinico (CAD test o anomaloscopio) | Prima di investire nella taratura fine; serve a validare il test nell'app |
 | Calibrazione del display con colorimetro | Si avvia il test a soglie nell'app |
 | `MediaProjection` e LUT 3D | La trasformazione lineare si dimostra insufficiente nei test di efficacia |
 | Profili per app | Emerge un bisogno concreto |
+
+### Misura e taratura personale (differita)
+
+Questa fase affina la conoscenza della condizione dell'utente e la scelta di `β`. Si avvia solo dopo alcuni giorni d'uso del filtro e dopo il riferimento clinico (vedi *Fasi successive (differite)*). Due principi la guidano. Primo: la misura (soglie) e l'efficacia (compiti) restano separate, così il test non può confermare da solo il filtro. Secondo: la soglia non determina `β`; il segnale per affinare `β` viene dal compito in cieco descritto sotto, perché l'ottimo è un compromesso con la naturalezza che dipende da un giudizio dell'utente.
+
+**Test a soglie (ridotto).** Il protocollo ha questi elementi.
+
+- Stimolo: una Landolt C con quattro orientamenti (risposta forzata a quattro scelte), formata da punti colorati su un campo di punti con rumore di luminanza dinamico. Come nel CAD, il rumore impedisce di risolvere il compito con la sola luminosità.
+- Direzioni: asse rosso-verde lungo le linee di confusione, direzione di controllo tritan (giallo-blu) e un blocco di controllo con il filtro acceso. Il blocco verifica che il rumore mascheri anche la luminanza introdotta dal filtro: se con il filtro la soglia migliora, il rumore è insufficiente.
+- Procedura: staircase con tre risposte corrette consecutive per scendere e un errore per salire (converge a circa il 79,4% di risposte corrette), da 8 a 10 inversioni, soglia come media delle ultime inversioni. Prove "catch" ad alto contrasto rilevano la disattenzione; si calcola un intervallo di confidenza e la misura si ripete in giorni diversi (test-retest).
+- Condizioni: matrice azzerata, Night Light e modalità lettura di MIUI disattivati, luminosità e modalità colore della finestra fissate e registrate. Un registro CSV salva per ogni prova direzione, contrasto, risposta, tempo di risposta e luminosità.
+- Conversione: dal triplet RGB (sRGB assunto) al contrasto dei coni con i fondamentali di Stockman-Sharpe. Primari e gamma del telefono non sono misurati, quindi il risultato è un **indice relativo**, non un contrasto assoluto.
+- Riferimenti: una o due persone con visione normale sullo stesso telefono forniscono la soglia di confronto; il riferimento clinico (CAD test o anomaloscopio) ancora la gravità.
+
+Vantaggi: la misura avviene sul display reale, è ripetibile e non dipende dal filtro. Limiti: la precisione è quella della calibrazione del display; il confronto si basa su pochi osservatori; non esiste una soglia assoluta.
+
+**Compito in cieco per affinare `β`.** Compiti a scelta forzata (ad esempio individuare il campione diverso tra un rosso e un verde di luminanza simile) si ripetono con `β` estratto a caso da un insieme di valori (ad esempio 0, 0.1, 0.15, 0.2 e 0.3) e con un **placebo attivo**: una trasformazione con un viraggio visibile simile ma senza accoppiamento con R−G. Un placebo `β = 0` non sarebbe cieco, perché il viraggio dei colori rivela quando il filtro è attivo. L'ordine è casuale e `β` non viene mostrato. Numero di prove per condizione e analisi (percentuale di risposte corrette per condizione con intervallo di confidenza): Da definire. La scelta finale di `β` spetta all'utente, tra i valori che non peggiorano le prestazioni.
+
+**Escluso volutamente.** La stima della gravità per inversione del modello di Machado, l'ottimizzazione di una matrice 3x3 e la procedura QUEST. Le prime due richiedono un modello di soglia validato con dati propri; la terza non aggiunge nulla allo staircase per un singolo utente. Si riprendono solo se il test a soglie mostra un limite concreto.
+
+**Suddivisione in branch (proposta).** Dopo lo script di avvio e la UI:
+
+1. `feature/threshold-core`: Kotlin puro, con conversione colore, specifica dello stimolo, staircase e registro. Lo staircase si verifica con osservatori simulati a soglia nota, controllando la convergenza. Verificabile con unit test.
+2. `feature/threshold-screen`: schermata Compose con Canvas, luminosità e modalità colore della finestra, azzeramento della matrice durante il test. Da verificare sul dispositivo.
+3. `feature/blind-task`: compito in cieco con placebo attivo e analisi. Da verificare sul dispositivo.
 
 ### Valutazione dell'efficacia
 
