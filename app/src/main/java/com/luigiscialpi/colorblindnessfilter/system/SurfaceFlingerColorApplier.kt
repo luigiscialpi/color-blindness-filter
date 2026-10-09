@@ -17,21 +17,12 @@ import com.luigiscialpi.colorblindnessfilter.domain.ColorTransform
 class SurfaceFlingerColorApplier(private val shell: RootShell) : ScreenColorApplier {
 
     override fun apply(transform: ColorTransform): ApplyResult =
-        execute("$TRANSACTION i32 1 ${transform.toSurfaceFlingerArgs()}")
+        shell.execute("$TRANSACTION i32 1 ${transform.toSurfaceFlingerArgs()}", REPLY_MARKER)
 
-    override fun reset(): ApplyResult = execute("$TRANSACTION i32 0")
-
-    private fun execute(command: String): ApplyResult {
-        if (!shell.isRootAvailable()) return ApplyResult.RootUnavailable
-        val result = shell.run(command)
-        val output = result.output.joinToString("\n")
-        if (result.isSuccess && output.contains(REPLY_MARKER)) return ApplyResult.Success
-        return ApplyResult.Failed(output.ifBlank { NO_OUTPUT })
-    }
+    override fun reset(): ApplyResult = shell.execute("$TRANSACTION i32 0", REPLY_MARKER)
 
     private companion object {
         const val TRANSACTION = "service call SurfaceFlinger 1015"
         const val REPLY_MARKER = "Parcel("
-        const val NO_OUTPUT = "comando fallito senza output"
     }
 }

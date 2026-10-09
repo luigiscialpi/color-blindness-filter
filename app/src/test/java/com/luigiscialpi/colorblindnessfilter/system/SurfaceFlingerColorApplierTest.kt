@@ -11,20 +11,6 @@ class SurfaceFlingerColorApplierTest {
     /** Risposta osservata sul dispositivo di prova: `Parcel(NULL)` con codice di uscita 0. */
     private val deviceReply = ShellResult(isSuccess = true, output = listOf("Result: Parcel(NULL)"))
 
-    private class FakeRootShell(
-        private val rootAvailable: Boolean = true,
-        private val result: ShellResult,
-    ) : RootShell {
-        val commands = mutableListOf<String>()
-
-        override fun isRootAvailable(): Boolean = rootAvailable
-
-        override fun run(command: String): ShellResult {
-            commands.add(command)
-            return result
-        }
-    }
-
     @Test
     fun applyInviaLaTransazioneConLaMatriceAttesa() {
         val shell = FakeRootShell(result = deviceReply)

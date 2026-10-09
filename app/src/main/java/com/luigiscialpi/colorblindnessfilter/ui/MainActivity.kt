@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.luigiscialpi.colorblindnessfilter.FilterController
 import com.luigiscialpi.colorblindnessfilter.data.SettingsRepository
 import com.luigiscialpi.colorblindnessfilter.data.filterSettingsDataStore
+import com.luigiscialpi.colorblindnessfilter.system.BootScriptWriter
 import com.luigiscialpi.colorblindnessfilter.system.LibsuRootShell
 import com.luigiscialpi.colorblindnessfilter.system.SurfaceFlingerColorApplier
 
@@ -26,9 +27,10 @@ class MainActivity : ComponentActivity() {
     private val viewModel: FilterViewModel by viewModels {
         viewModelFactory {
             initializer {
+                val shell = LibsuRootShell()
                 FilterViewModel(
                     repository = SettingsRepository(applicationContext.filterSettingsDataStore),
-                    controller = FilterController(SurfaceFlingerColorApplier(LibsuRootShell())),
+                    controller = FilterController(SurfaceFlingerColorApplier(shell), BootScriptWriter(shell)),
                 )
             }
         }
