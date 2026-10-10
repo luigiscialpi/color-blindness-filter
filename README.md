@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 11** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto, la decisione sul riavvio e il nucleo del test a soglie. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 12** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto, la decisione sul riavvio, il nucleo del test a soglie e la schermata del test. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -190,6 +190,7 @@ La tabella riporta le prove eseguite e il loro esito, nell'ordine in cui sono st
 - **Confronto con la correzione nativa** di Android sul campo. TO DO.
 - **Verifica clinica** (anomaloscopio). TO DO.
 - **Conferma dell'applicazione.** `service call` risponde `Parcel(NULL)` con codice di uscita 0 anche con una matrice non valida, quindi l'esito del comando non prova che la matrice sia stata applicata. La validità va garantita dal dominio (ultima riga fissa, `β` limitato). Da approfondire.
+- **Schermata del test a soglie.** Scritta ma non verificata sul dispositivo: leggibilità della C a intensità diverse, comportamento di luminosità e modalità colore della finestra su MIUI, ripristino delle impostazioni a fine test.
 
 ### Riferimenti tecnici consultati
 
@@ -312,11 +313,13 @@ Questa fase affina la conoscenza della condizione dell'utente e la scelta di `β
 - Stimolo: una Landolt C con quattro orientamenti (risposta forzata a quattro scelte), formata da punti colorati su un campo di punti con rumore di luminanza dinamico. Come nel CAD, il rumore impedisce di risolvere il compito con la sola luminosità.
 - Direzioni: asse rosso-verde lungo le linee di confusione, direzione di controllo tritan (giallo-blu) e un blocco di controllo con il filtro acceso. Il blocco verifica che il rumore mascheri anche la luminanza introdotta dal filtro: se con il filtro la soglia migliora, il rumore è insufficiente.
 - Procedura: staircase con tre risposte corrette consecutive per scendere e un errore per salire (converge a circa il 79,4% di risposte corrette), da 8 a 10 inversioni, soglia come media delle ultime inversioni. Prove "catch" ad alto contrasto rilevano la disattenzione; si calcola un intervallo di confidenza e la misura si ripete in giorni diversi (test-retest).
-- Condizioni: matrice azzerata, Night Light e modalità lettura di MIUI disattivati, luminosità e modalità colore della finestra fissate e registrate. Un registro CSV salva per ogni prova direzione, contrasto, risposta, tempo di risposta e luminosità.
+- Condizioni: il test azzera la matrice e fissa luminosità e modalità colore della finestra. Night Light e modalità lettura di MIUI vanno disattivati a mano prima di iniziare: l'app lo ricorda nella schermata iniziale. Un registro CSV salva per ogni prova direzione, contrasto, risposta, tempo di risposta e luminosità.
 - Conversione: dal triplet RGB (sRGB assunto) al contrasto dei coni con i fondamentali dei coni di Smith-Pokorny (quelli del diagramma di MacLeod-Boynton), applicati a XYZ CIE 1931. Non esiste una matrice esatta da XYZ a LMS: i fondamentali di Stockman-Sharpe e i primari misurati del display sono il passo successivo se serve più precisione. Primari e gamma del telefono non sono misurati, quindi il risultato è un **indice relativo**, non un contrasto assoluto.
 - Riferimenti: una o due persone con visione normale sullo stesso telefono forniscono la soglia di confronto; il riferimento clinico (CAD test o anomaloscopio) ancora la gravità.
 
 Vantaggi: la misura avviene sul display reale, è ripetibile e non dipende dal filtro. Limiti: la precisione è quella della calibrazione del display; il confronto si basa su pochi osservatori; non esiste una soglia assoluta.
+
+Parametri attuali (provvisori): campo di 36×36 punti con variazione di luminanza di ±10%; sfondo grigio sRGB al 50%; prove di tipo catch ogni 8 prove, sull'asse S al 90% del contrasto massimo; contrasto limitato al 100% di cono e al gamut dello schermo; staircase con passo ×1.25, 10 inversioni (media delle ultime 6) e al massimo 200 prove per asse; le prove dei due assi sono alternate a caso.
 
 **Compito in cieco per affinare `β`.** Compiti a scelta forzata (ad esempio individuare il campione diverso tra un rosso e un verde di luminanza simile) si ripetono con `β` estratto a caso da un insieme di valori (ad esempio 0, 0.1, 0.15, 0.2 e 0.3) e con un **placebo attivo**: una trasformazione con un viraggio visibile simile ma senza accoppiamento con R−G. Un placebo `β = 0` non sarebbe cieco, perché il viraggio dei colori rivela quando il filtro è attivo. L'ordine è casuale e `β` non viene mostrato. Numero di prove per condizione e analisi (percentuale di risposte corrette per condizione con intervallo di confidenza): Da definire. La scelta finale di `β` spetta all'utente, tra i valori che non peggiorano le prestazioni.
 
@@ -325,7 +328,7 @@ Vantaggi: la misura avviene sul display reale, è ripetibile e non dipende dal f
 **Suddivisione in branch (proposta).** Dopo lo script di avvio e la UI:
 
 1. `feature/threshold-core`: Kotlin puro, con conversione colore, specifica dello stimolo, staircase e registro. Lo staircase si verifica con osservatori simulati a soglia nota, controllando la convergenza. Verificabile con unit test. Implementato nel package `measure` con `ConeSpace`, `Staircase` e `TrialLog`.
-2. `feature/threshold-screen`: schermata Compose con Canvas, luminosità e modalità colore della finestra, azzeramento della matrice durante il test. Da verificare sul dispositivo.
+2. `feature/threshold-screen`: schermata Compose con Canvas, luminosità e modalità colore della finestra, azzeramento della matrice durante il test. Da verificare sul dispositivo. Implementata con `LandoltStimulusGenerator` e `ThresholdSession` (Kotlin puro, verificati con unit test) e con `ThresholdTestViewModel`, `ThresholdTestScreen` e `ThresholdTestActivity` (non verificati qui). Si apre dal pulsante «Test a soglie» della schermata principale; il blocco di controllo con il filtro acceso misura solo l'asse rosso-verde.
 3. `feature/blind-task`: compito in cieco con placebo attivo e analisi. Da verificare sul dispositivo.
 
 ### Valutazione dell'efficacia
@@ -436,6 +439,12 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 - [x] `Staircase` con osservatori simulati (convergenza verificata)
 - [x] `TrialLog` con esportazione CSV
 
+`feature/threshold-screen`
+- [x] `LandoltStimulusGenerator`: campo di punti con C di Landolt e variazione di luminanza
+- [x] `ThresholdSession`: staircase alternati, prove catch e registro (osservatori simulati)
+- [x] `AppDependencies` e `FilterTheme` condivisi dalle schermate
+- [ ] `ThresholdTestViewModel`, `ThresholdTestScreen` e `ThresholdTestActivity` (scritti, da verificare con build e dispositivo)
+
 ## Elenco file impattati
 
 Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relativi test sono già presenti; gli altri sono proposti e vanno confermati branch per branch.
@@ -465,7 +474,7 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/FilterControllerTest.kt`: nuovo, test del controller
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/FilterSettingsTest.kt`: nuovo, test delle impostazioni
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/SettingsRepositoryTest.kt`: nuovo, test della persistenza
-- `app/src/main/AndroidManifest.xml`: dichiarazione di applicazione e `MainActivity` avviabile (con l'alternativa B non serve alcun permesso di boot)
+- `app/src/main/AndroidManifest.xml`: dichiarazione di applicazione, `MainActivity` avviabile e `ThresholdTestActivity` (con l'alternativa B non serve alcun permesso di boot)
 - `app/build.gradle.kts`: nuovo, dipendenze (Compose, DataStore, `libsu`)
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/ConeSpace.kt`: nuovo, conversione RGB-coni e stimoli a contrasto di cono
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/Staircase.kt`: nuovo, procedura adattiva 3-down/1-up
@@ -473,3 +482,12 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/ConeSpaceTest.kt`: nuovo, test della conversione e degli stimoli
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/StaircaseTest.kt`: nuovo, test con osservatori simulati
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/TrialLogTest.kt`: nuovo, test del registro
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/LandoltStimulus.kt`: nuovo, campo di punti con la C di Landolt
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/ThresholdSession.kt`: nuovo, sessione del test (staircase, catch, registro)
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/AppDependencies.kt`: nuovo, cablaggio delle dipendenze condiviso
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/FilterTheme.kt`: nuovo, tema condiviso dalle schermate
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/ThresholdTestViewModel.kt`: nuovo, conduzione del test e ripristino delle impostazioni
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/ThresholdTestScreen.kt`: nuovo, schermata del test
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/ThresholdTestActivity.kt`: nuovo, finestra a luminanza massima e modalità colore predefinita
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/LandoltStimulusTest.kt`: nuovo, test dello stimolo
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/ThresholdSessionTest.kt`: nuovo, test della sessione con osservatori simulati
