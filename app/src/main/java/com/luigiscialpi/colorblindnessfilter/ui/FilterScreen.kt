@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -38,12 +41,14 @@ fun FilterScreen(
     onEnabledChange: (Boolean) -> Unit,
     onIntensityChange: (Double) -> Unit,
     onIntensityChangeFinished: () -> Unit,
+    onOpenThresholdTest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .safeDrawingPadding()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
@@ -56,6 +61,9 @@ fun FilterScreen(
         )
         ReferencePatches()
         StatusMessage(result = state.lastResult)
+        OutlinedButton(onClick = onOpenThresholdTest, modifier = Modifier.fillMaxWidth()) {
+            Text("Test a soglie")
+        }
     }
 }
 

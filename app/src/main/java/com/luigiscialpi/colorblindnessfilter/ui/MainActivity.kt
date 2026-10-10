@@ -1,5 +1,6 @@
 package com.luigiscialpi.colorblindnessfilter.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
                     onEnabledChange = viewModel::onEnabledChange,
                     onIntensityChange = viewModel::onIntensityChange,
                     onIntensityChangeFinished = viewModel::onIntensityChangeFinished,
+                    onOpenThresholdTest = { startActivity(Intent(this, ThresholdTestActivity::class.java)) },
                 )
             }
         }
