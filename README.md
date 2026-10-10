@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 9** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 10** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto e la decisione sul riavvio. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -183,7 +183,7 @@ La tabella riporta le prove eseguite e il loro esito, nell'ordine in cui sono st
 
 ### Cosa resta non verificato
 
-- **Riavvio.** Non provato: è probabile che SurfaceFlinger riparta senza matrice. TO DO verificare al prossimo riavvio.
+- **Riavvio.** Non verificato per scelta dell'utente: il funzionamento dello script di avvio è assunto, non provato. Se dopo un riavvio i colori risultano normali, l'ipotesi è errata e si interviene su `BootScriptWriter` (vedi *Riapplicazione al boot*).
 - **Contenuti protetti** (`FLAG_SECURE`, DRM). Da approfondire.
 - **Spazio colore** in cui SurfaceFlinger applica la matrice (lineare o con gamma). Da approfondire.
 - **Efficacia su compiti.** Finora solo impressioni soggettive; nessuna misura di errori o tempi.
@@ -279,6 +279,8 @@ Il riavvio probabilmente azzera la matrice (vedi *Cosa resta non verificato*), q
 - **B — script Magisk in `/data/adb/service.d/`, generato dall'app.** Vantaggi: indipendente dall'app e dalle restrizioni MIUI al momento del boot; l'app resta l'unica fonte di verità perché riscrive lo script a ogni cambio di impostazioni, quindi `β` non viene duplicato a mano. Limiti: dipende da Magisk; lo script resta sul dispositivo anche se l'app viene disinstallata (la rimozione manuale va documentata).
 
 Decisione: **B**. L'alternativa A è scartata perché aggiunge un componente Android e dipende dall'avvio automatico di MIUI.
+
+Decisione dell'utente: la verifica con un riavvio reale non viene eseguita e il funzionamento dello script è assunto. Se serve riapplicare la matrice a mano, il comando `su -c "sh /data/adb/service.d/color-blindness-filter.sh"` esegue lo script installato.
 
 **Come svilupparla.** Una classe `BootScriptWriter` scrive lo script (attesa di `sys.boot_completed`, breve ritardo, comando della matrice corrente) in un file temporaneo e lo sposta in `/data/adb/service.d/` con permessi eseguibili; con il filtro disattivato rimuove lo script. Il contenuto è composto solo da testo fisso e valori numerici formattati con `Locale.ROOT`. L'esecuzione dei comandi è condivisa con l'applier tramite `RootShell.execute`, e `FilterController` installa lo script solo se l'applicazione della matrice riesce.
 
@@ -427,7 +429,7 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 `feature/magisk-boot-script`
 - [x] `BootScriptWriter` con scrittura atomica e rimozione
 - [x] Test con directory temporanea e con shell locale
-- [ ] Verifica dopo riavvio reale (da fare sul telefono)
+- [ ] Verifica dopo riavvio reale (non eseguita per scelta dell'utente: funzionamento assunto)
 
 ## Elenco file impattati
 
