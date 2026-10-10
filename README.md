@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 10** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto e la decisione sul riavvio. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 11** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto, la decisione sul riavvio e il nucleo del test a soglie. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -313,7 +313,7 @@ Questa fase affina la conoscenza della condizione dell'utente e la scelta di `β
 - Direzioni: asse rosso-verde lungo le linee di confusione, direzione di controllo tritan (giallo-blu) e un blocco di controllo con il filtro acceso. Il blocco verifica che il rumore mascheri anche la luminanza introdotta dal filtro: se con il filtro la soglia migliora, il rumore è insufficiente.
 - Procedura: staircase con tre risposte corrette consecutive per scendere e un errore per salire (converge a circa il 79,4% di risposte corrette), da 8 a 10 inversioni, soglia come media delle ultime inversioni. Prove "catch" ad alto contrasto rilevano la disattenzione; si calcola un intervallo di confidenza e la misura si ripete in giorni diversi (test-retest).
 - Condizioni: matrice azzerata, Night Light e modalità lettura di MIUI disattivati, luminosità e modalità colore della finestra fissate e registrate. Un registro CSV salva per ogni prova direzione, contrasto, risposta, tempo di risposta e luminosità.
-- Conversione: dal triplet RGB (sRGB assunto) al contrasto dei coni con i fondamentali di Stockman-Sharpe. Primari e gamma del telefono non sono misurati, quindi il risultato è un **indice relativo**, non un contrasto assoluto.
+- Conversione: dal triplet RGB (sRGB assunto) al contrasto dei coni con i fondamentali dei coni di Smith-Pokorny (quelli del diagramma di MacLeod-Boynton), applicati a XYZ CIE 1931. Non esiste una matrice esatta da XYZ a LMS: i fondamentali di Stockman-Sharpe e i primari misurati del display sono il passo successivo se serve più precisione. Primari e gamma del telefono non sono misurati, quindi il risultato è un **indice relativo**, non un contrasto assoluto.
 - Riferimenti: una o due persone con visione normale sullo stesso telefono forniscono la soglia di confronto; il riferimento clinico (CAD test o anomaloscopio) ancora la gravità.
 
 Vantaggi: la misura avviene sul display reale, è ripetibile e non dipende dal filtro. Limiti: la precisione è quella della calibrazione del display; il confronto si basa su pochi osservatori; non esiste una soglia assoluta.
@@ -324,7 +324,7 @@ Vantaggi: la misura avviene sul display reale, è ripetibile e non dipende dal f
 
 **Suddivisione in branch (proposta).** Dopo lo script di avvio e la UI:
 
-1. `feature/threshold-core`: Kotlin puro, con conversione colore, specifica dello stimolo, staircase e registro. Lo staircase si verifica con osservatori simulati a soglia nota, controllando la convergenza. Verificabile con unit test.
+1. `feature/threshold-core`: Kotlin puro, con conversione colore, specifica dello stimolo, staircase e registro. Lo staircase si verifica con osservatori simulati a soglia nota, controllando la convergenza. Verificabile con unit test. Implementato nel package `measure` con `ConeSpace`, `Staircase` e `TrialLog`.
 2. `feature/threshold-screen`: schermata Compose con Canvas, luminosità e modalità colore della finestra, azzeramento della matrice durante il test. Da verificare sul dispositivo.
 3. `feature/blind-task`: compito in cieco con placebo attivo e analisi. Da verificare sul dispositivo.
 
@@ -431,6 +431,11 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 - [x] Test con directory temporanea e con shell locale
 - [ ] Verifica dopo riavvio reale (non eseguita per scelta dell'utente: funzionamento assunto)
 
+`feature/threshold-core`
+- [x] `ConeSpace`: conversione RGB-coni e stimoli a contrasto di cono
+- [x] `Staircase` con osservatori simulati (convergenza verificata)
+- [x] `TrialLog` con esportazione CSV
+
 ## Elenco file impattati
 
 Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relativi test sono già presenti; gli altri sono proposti e vanno confermati branch per branch.
@@ -462,3 +467,9 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/SettingsRepositoryTest.kt`: nuovo, test della persistenza
 - `app/src/main/AndroidManifest.xml`: dichiarazione di applicazione e `MainActivity` avviabile (con l'alternativa B non serve alcun permesso di boot)
 - `app/build.gradle.kts`: nuovo, dipendenze (Compose, DataStore, `libsu`)
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/ConeSpace.kt`: nuovo, conversione RGB-coni e stimoli a contrasto di cono
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/Staircase.kt`: nuovo, procedura adattiva 3-down/1-up
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/TrialLog.kt`: nuovo, registro delle prove in CSV
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/ConeSpaceTest.kt`: nuovo, test della conversione e degli stimoli
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/StaircaseTest.kt`: nuovo, test con osservatori simulati
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/TrialLogTest.kt`: nuovo, test del registro
