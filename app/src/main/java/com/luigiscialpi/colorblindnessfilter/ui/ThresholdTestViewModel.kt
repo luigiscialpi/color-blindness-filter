@@ -7,12 +7,14 @@ import com.luigiscialpi.colorblindnessfilter.FilterController
 import com.luigiscialpi.colorblindnessfilter.data.FilterSettings
 import com.luigiscialpi.colorblindnessfilter.data.SettingsRepository
 import com.luigiscialpi.colorblindnessfilter.domain.LuminanceShiftFilter
+import com.luigiscialpi.colorblindnessfilter.measure.BetaSweep
 import com.luigiscialpi.colorblindnessfilter.measure.ChromaticAxis
 import com.luigiscialpi.colorblindnessfilter.measure.ConeSpace
 import com.luigiscialpi.colorblindnessfilter.measure.Dot
 import com.luigiscialpi.colorblindnessfilter.measure.LandoltStimulusGenerator
 import com.luigiscialpi.colorblindnessfilter.measure.LinearRgb
 import com.luigiscialpi.colorblindnessfilter.measure.Orientation
+import com.luigiscialpi.colorblindnessfilter.measure.SweepEntry
 import com.luigiscialpi.colorblindnessfilter.measure.ThresholdSession
 import com.luigiscialpi.colorblindnessfilter.measure.Trial
 import com.luigiscialpi.colorblindnessfilter.system.ApplyResult
@@ -49,17 +51,30 @@ sealed interface ThresholdTestState {
     data class Failed(val message: String) : ThresholdTestState
 }
 
+/**
+ * Un blocco di prove con una condizione di filtro. [beta] = 0 significa filtro azzerato;
+ * [displayLabel] è il testo mostrato durante le prove (nella scansione non rivela `β`).
+ */
+private data class BlockSpec(
+    val label: String,
+    val displayLabel: String,
+    val beta: Double,
+    val axes: List<ChromaticAxis>,
+    val isSweep: Boolean = false,
+)
+
 private data class BlockResult(
     val label: String,
     val thresholds: Map<ChromaticAxis, Double?>,
     val catchAccuracy: Double?,
     val csv: String,
+    val isSweep: Boolean,
 )
 
 /**
- * Conduce il test a soglie: azzera il filtro (o lo accende, nel blocco di controllo), presenta
- * le prove di [ThresholdSession], raccoglie le risposte e a fine blocco ripristina le
- * impostazioni dell'utente.
+ * Conduce il test a soglie: porta lo schermo nella condizione di ogni blocco (filtro azzerato,
+ * acceso con l'intensità salvata, oppure con un `β` della scansione), presenta le prove di
+ * [ThresholdSession], raccoglie le risposte e a fine lavoro ripristina le impostazioni dell'utente.
  */
 class ThresholdTestViewModel(
     private val applier: ScreenColorApplier,
@@ -72,38 +87,51 @@ class ThresholdTestViewModel(
     val state: StateFlow<ThresholdTestState> = _state.asStateFlow()
 
     private val random = Random(System.nanoTime())
+    private val pending = ArrayDeque<BlockSpec>()
     private val blocks = mutableListOf<BlockResult>()
+    private val sweepEntries = mutableListOf<SweepEntry>()
+    private var currentBlock: BlockSpec? = null
     private var session: ThresholdSession? = null
     private var generator: LandoltStimulusGenerator? = null
     private var trial: Trial? = null
     private var presentedAtMs = 0L
-    private var blockLabel = ""
     private var savedSettings: FilterSettings? = null
     private var restored = true
 
     // ponytail: ambito separato e mai annullato, perché il ripristino in onCleared deve
     // concludersi anche quando viewModelScope è già stato annullato. Se il processo viene
-    // ucciso a metà test, il filtro resta spento finché non lo si riaccende dalla schermata principale.
+    // ucciso a metà test, il filtro resta nella condizione dell'ultimo blocco finché non lo si
+    // riaccende o spegne dalla schermata principale.
     private val restoreScope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
+    /** Un blocco: filtro spento (rosso-verde e giallo-blu) oppure controllo con il filtro acceso (solo rosso-verde). */
     fun start(withFilter: Boolean) {
-        _state.value = ThresholdTestState.Preparing
-        viewModelScope.launch {
-            val settings = savedSettings ?: repository.settings.first().also { savedSettings = it }
-            restored = false
-            val result = withContext(ioDispatcher) {
-                if (withFilter) {
-                    applier.apply(LuminanceShiftFilter.transform(settings.intensity))
-                } else {
-                    applier.reset()
-                }
+        launchBlocks { settings ->
+            if (withFilter) {
+                val label = "controllo con filtro acceso (beta ${BetaSweep.format(settings.intensity)})"
+                listOf(BlockSpec(label, "controllo con filtro acceso", settings.intensity, listOf(ChromaticAxis.M_ISOLATING)))
+            } else {
+                listOf(BlockSpec("filtro spento", "filtro spento", 0.0, ChromaticAxis.entries))
             }
-            if (result !is ApplyResult.Success) {
-                restoreSettings()
-                _state.value = ThresholdTestState.Failed(describeStartFailure(result))
-                return@launch
+        }
+    }
+
+    /**
+     * Una ripetizione della scansione: la soglia rosso-verde a ogni `β`, in ordine casuale. Durante le
+     * prove non si vede quale `β` è attivo; i valori si rivelano nei risultati.
+     */
+    fun startSweep() {
+        launchBlocks {
+            val order = BetaSweep(SWEEP_BETAS, random).shuffledOrder()
+            order.mapIndexed { index, beta ->
+                BlockSpec(
+                    label = "scansione beta ${BetaSweep.format(beta)}",
+                    displayLabel = "scansione: blocco ${index + 1} di ${order.size}",
+                    beta = beta,
+                    axes = listOf(ChromaticAxis.M_ISOLATING),
+                    isSweep = true,
+                )
             }
-            beginSession(withFilter)
         }
     }
 
@@ -118,10 +146,30 @@ class ThresholdTestViewModel(
     /** Testo con i registri CSV di tutti i blocchi eseguiti, ciascuno preceduto dall'etichetta. */
     fun exportText(): String = blocks.joinToString(separator = "\n") { "# ${it.label}\n${it.csv}" }
 
-    private fun beginSession(withFilter: Boolean) {
-        val axes = if (withFilter) listOf(ChromaticAxis.M_ISOLATING) else ChromaticAxis.entries
-        blockLabel = if (withFilter) "controllo con filtro acceso" else "filtro spento"
-        session = ThresholdSession(axes, TEST_BACKGROUND, random, LUMINANCE_JITTER)
+    private fun launchBlocks(plan: (FilterSettings) -> List<BlockSpec>) {
+        _state.value = ThresholdTestState.Preparing
+        viewModelScope.launch {
+            val settings = savedSettings ?: repository.settings.first().also { savedSettings = it }
+            pending.clear()
+            pending.addAll(plan(settings))
+            restored = false
+            runNextBlock()
+        }
+    }
+
+    private suspend fun runNextBlock() {
+        val spec = pending.removeFirst()
+        val result = withContext(ioDispatcher) {
+            if (spec.beta == 0.0) applier.reset() else applier.apply(LuminanceShiftFilter.transform(spec.beta))
+        }
+        if (result !is ApplyResult.Success) {
+            pending.clear()
+            restoreSettings()
+            _state.value = ThresholdTestState.Failed(describeStartFailure(result))
+            return
+        }
+        currentBlock = spec
+        session = ThresholdSession(spec.axes, TEST_BACKGROUND, random, LUMINANCE_JITTER)
         generator = LandoltStimulusGenerator(random, luminanceJitter = LUMINANCE_JITTER)
         showNextTrial()
     }
@@ -136,16 +184,24 @@ class ThresholdTestViewModel(
         trial = next
         val dots = checkNotNull(generator).generate(TEST_BACKGROUND, next.axis, next.signedContrast, next.orientation)
         presentedAtMs = SystemClock.elapsedRealtime()
-        _state.value = ThresholdTestState.Running(dots, current.answeredTrials, blockLabel)
+        _state.value = ThresholdTestState.Running(dots, current.answeredTrials, checkNotNull(currentBlock).displayLabel)
     }
 
     private fun finishBlock() {
+        val spec = checkNotNull(currentBlock)
         val current = checkNotNull(session)
-        blocks.add(BlockResult(blockLabel, current.thresholds(), current.catchAccuracy(), current.log.toCsv()))
+        val thresholds = current.thresholds()
+        blocks.add(BlockResult(spec.label, thresholds, current.catchAccuracy(), current.log.toCsv(), spec.isSweep))
+        if (spec.isSweep) sweepEntries.add(SweepEntry(spec.beta, thresholds[ChromaticAxis.M_ISOLATING]))
+        currentBlock = null
         session = null
         generator = null
         _state.value = ThresholdTestState.Preparing
         viewModelScope.launch {
+            if (pending.isNotEmpty()) {
+                runNextBlock()
+                return@launch
+            }
             val restore = restoreSettings()
             _state.value = ThresholdTestState.Finished(summary(restore))
         }
@@ -172,7 +228,7 @@ class ThresholdTestViewModel(
     }
 
     private fun summary(restore: ApplyResult?): String = buildString {
-        for (block in blocks) {
+        for (block in blocks.filterNot { it.isSweep }) {
             appendLine("Blocco: ${block.label}")
             for ((axis, threshold) in block.thresholds) {
                 appendLine("  ${axisName(axis)}: ${formatThreshold(threshold)}")
@@ -181,11 +237,22 @@ class ThresholdTestViewModel(
             appendLine("  Prove catch corrette: $catches")
             appendLine()
         }
+        if (sweepEntries.isNotEmpty()) appendSweepSummary()
         appendLine("Indice relativo: il display non è calibrato, quindi non è un contrasto assoluto.")
         if (restore != null && restore !is ApplyResult.Success) {
             appendLine()
             appendLine("Attenzione: il ripristino delle impostazioni non è riuscito. Riaccendi il filtro dalla schermata principale.")
         }
+    }
+
+    private fun StringBuilder.appendSweepSummary() {
+        appendLine("Scansione di beta (soglia rosso-verde, minore è meglio)")
+        for (row in BetaSweep.summarize(sweepEntries)) {
+            val mean = formatThreshold(row.geometricMeanThreshold)
+            val gain = row.improvementOverNoFilter?.let { String.format(Locale.getDefault(), ", %.1f volte meglio del riferimento", it) } ?: ""
+            appendLine("  beta ${BetaSweep.format(row.beta)}: $mean (${row.repetitions} ripetizioni)$gain")
+        }
+        appendLine()
     }
 
     private fun axisName(axis: ChromaticAxis): String = when (axis) {
@@ -195,7 +262,7 @@ class ThresholdTestViewModel(
 
     private fun formatThreshold(threshold: Double?): String =
         if (threshold == null) {
-            "non determinata (stimolo mai visto anche al massimo, o sempre visto)"
+            "non determinata"
         } else {
             String.format(Locale.getDefault(), "%.1f%% di contrasto di cono", threshold * 100)
         }
@@ -205,5 +272,8 @@ class ThresholdTestViewModel(
 
         /** Luminosità della finestra durante il test (1.0 = massima); il valore reale dipende dal pannello. */
         const val SCREEN_BRIGHTNESS = 1.0
+
+        /** Valori di `β` della scansione: 0 è il riferimento senza filtro. */
+        val SWEEP_BETAS = listOf(0.0, 0.05, 0.10, 0.15, 0.20, 0.30)
     }
 }

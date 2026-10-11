@@ -44,6 +44,7 @@ class ThresholdTestActivity : ComponentActivity() {
                 ThresholdTestScreen(
                     state = state,
                     onStart = viewModel::start,
+                    onStartSweep = viewModel::startSweep,
                     onAnswer = viewModel::onAnswer,
                     onCopyResults = ::copyResults,
                     onClose = ::finish,

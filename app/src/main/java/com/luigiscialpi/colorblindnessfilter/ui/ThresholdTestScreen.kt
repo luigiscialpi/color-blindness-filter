@@ -32,6 +32,7 @@ import com.luigiscialpi.colorblindnessfilter.measure.Orientation
 fun ThresholdTestScreen(
     state: ThresholdTestState,
     onStart: (withFilter: Boolean) -> Unit,
+    onStartSweep: () -> Unit,
     onAnswer: (Orientation) -> Unit,
     onCopyResults: () -> Unit,
     onClose: () -> Unit,
@@ -46,12 +47,13 @@ fun ThresholdTestScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         when (state) {
-            ThresholdTestState.Intro -> IntroContent(onStart = onStart, onClose = onClose)
+            ThresholdTestState.Intro -> IntroContent(onStart = onStart, onStartSweep = onStartSweep, onClose = onClose)
             ThresholdTestState.Preparing -> Text("Preparazione…", style = MaterialTheme.typography.titleMedium)
             is ThresholdTestState.Running -> RunningContent(state = state, onAnswer = onAnswer)
             is ThresholdTestState.Finished -> FinishedContent(
                 summary = state.summary,
                 onStart = onStart,
+                onStartSweep = onStartSweep,
                 onCopyResults = onCopyResults,
                 onClose = onClose,
             )
@@ -64,7 +66,7 @@ fun ThresholdTestScreen(
 }
 
 @Composable
-private fun IntroContent(onStart: (Boolean) -> Unit, onClose: () -> Unit) {
+private fun IntroContent(onStart: (Boolean) -> Unit, onStartSweep: () -> Unit, onClose: () -> Unit) {
     Text("Test a soglie", style = MaterialTheme.typography.headlineSmall)
     Text(
         "Prima di iniziare disattiva Night Light e la modalità lettura di MIUI. Durante il test lo " +
@@ -72,7 +74,8 @@ private fun IntroContent(onStart: (Boolean) -> Unit, onClose: () -> Unit) {
         style = MaterialTheme.typography.bodyLarge,
     )
     Text(
-        "A ogni schermata indica dove si apre la C. Se non la vedi, scegli comunque la direzione che ti sembra più probabile.",
+        "A ogni schermata indica dove si apre la C. Se non la vedi, scegli comunque la direzione che ti sembra più probabile. " +
+            "Nella scansione di β il valore del filtro cambia a ogni blocco senza dirtelo: i valori compaiono solo nei risultati.",
         style = MaterialTheme.typography.bodyLarge,
     )
     Button(onClick = { onStart(false) }, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)) {
@@ -80,6 +83,9 @@ private fun IntroContent(onStart: (Boolean) -> Unit, onClose: () -> Unit) {
     }
     OutlinedButton(onClick = { onStart(true) }, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)) {
         Text("Controllo con filtro acceso")
+    }
+    OutlinedButton(onClick = onStartSweep, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)) {
+        Text("Scansione di β (10-15 minuti)")
     }
     TextButton(onClick = onClose) { Text("Chiudi") }
 }
@@ -131,6 +137,7 @@ private fun AnswerButton(
 private fun FinishedContent(
     summary: String,
     onStart: (Boolean) -> Unit,
+    onStartSweep: () -> Unit,
     onCopyResults: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -141,6 +148,9 @@ private fun FinishedContent(
     }
     OutlinedButton(onClick = { onStart(true) }, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)) {
         Text("Controllo con filtro acceso")
+    }
+    OutlinedButton(onClick = onStartSweep, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)) {
+        Text("Ripeti la scansione di β")
     }
     TextButton(onClick = onClose) { Text("Chiudi") }
 }
