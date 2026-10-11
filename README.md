@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 12** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto, la decisione sul riavvio, il nucleo del test a soglie e la schermata del test. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 13** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto, la decisione sul riavvio, il nucleo del test a soglie, la schermata del test, i primi risultati e la scansione di β. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -15,6 +15,7 @@ Stato del documento: **DRAFT, versione 12** — aggiornato dopo lo spike A (matr
 - Stato attuale
   - Dispositivo di test
   - Esiti dello spike A
+  - Prime misure con il test a soglie
   - Cosa resta non verificato
   - Riferimenti tecnici consultati
 - DRAFT: Ipotesi di funzionamento
@@ -181,6 +182,27 @@ La tabella riporta le prove eseguite e il loro esito, nell'ordine in cui sono st
 | Test di Ishihara (riferito dall'utente) | Circa la metà delle tavole viste; non quantifica la gravità (vedi *Misura oggettiva della condizione*) |
 | Esito di `service call` con matrice valida e non valida | In entrambi i casi `Result: Parcel(NULL)` e codice di uscita 0: il comando non segnala se la matrice è stata accettata |
 
+### Prime misure con il test a soglie
+
+Il test è stato eseguito sul telefono con un blocco a filtro spento (assi rosso-verde e giallo-blu) e un blocco di controllo con il filtro acceso all'intensità salvata nell'app (solo asse rosso-verde).
+
+| Blocco | Rosso-verde (cono M) | Giallo-blu (cono S) | Prove catch corrette | Prove totali |
+|---|---|---|---|---|
+| Filtro spento | 12,9% | 8,5% | 12 su 12 | 97 |
+| Controllo con filtro acceso | 2,4% | non misurato | 8 su 8 | 69 |
+
+Lettura dei risultati:
+
+- Le soglie ricostruite dal registro CSV (12,87%, 8,47% e 2,41%) coincidono con quelle mostrate dall'app, quindi la catena stimolo, staircase e registro è coerente.
+- Con il filtro la soglia rosso-verde è circa 5,3 volte più bassa. La dispersione di una singola stima, ricavata dalle simulazioni, è di circa l'11%: la differenza è molto più grande del rumore di misura. La misura è però una per blocco.
+- Alla soglia con il filtro (2,4%) la differenza cromatica diventa una differenza di luminanza di circa l'1,4% (pesi di luminanza standard, segno invertito): è il meccanismo atteso del filtro.
+- Il blocco di controllo misura quindi l'efficacia del filtro nel compito. La frase iniziale del protocollo, secondo cui un miglioramento con il filtro indicherebbe un rumore di luminanza insufficiente, confondeva due cose ed è stata corretta.
+- A filtro spento, lo stimolo alla soglia misurata (12,9%) porta circa +4,5% di luminanza per un osservatore standard. La soglia può quindi includere un contributo di luminanza e va letta come un limite inferiore della soglia cromatica pura.
+- Limiti: ordine fisso dei blocchi (prima senza filtro, poi con filtro: possibile effetto di apprendimento), nessuna cecità rispetto alla condizione, una sola ripetizione, display non calibrato. Il contrasto massimo rappresentabile sull'asse rosso-verde con questo sfondo è del 22,5% e lo staircase parte da lì: una soglia più alta non sarebbe misurabile.
+- Nessun riferimento di osservatori con visione normale sullo stesso telefono: i valori assoluti non sono interpretabili, solo i confronti tra condizioni.
+
+Il passo successivo è la scansione di `β` (vedi *Misura e taratura personale (differita)*), che ripete la misura a più valori in ordine casuale e senza mostrare quale è attivo.
+
 ### Cosa resta non verificato
 
 - **Riavvio.** Non verificato per scelta dell'utente: il funzionamento dello script di avvio è assunto, non provato. Se dopo un riavvio i colori risultano normali, l'ipotesi è errata e si interviene su `BootScriptWriter` (vedi *Riapplicazione al boot*).
@@ -190,7 +212,7 @@ La tabella riporta le prove eseguite e il loro esito, nell'ordine in cui sono st
 - **Confronto con la correzione nativa** di Android sul campo. TO DO.
 - **Verifica clinica** (anomaloscopio). TO DO.
 - **Conferma dell'applicazione.** `service call` risponde `Parcel(NULL)` con codice di uscita 0 anche con una matrice non valida, quindi l'esito del comando non prova che la matrice sia stata applicata. La validità va garantita dal dominio (ultima riga fissa, `β` limitato). Da approfondire.
-- **Schermata del test a soglie.** Scritta ma non verificata sul dispositivo: leggibilità della C a intensità diverse, comportamento di luminosità e modalità colore della finestra su MIUI, ripristino delle impostazioni a fine test.
+- **Test a soglie.** Eseguito sul dispositivo con esito positivo (vedi *Prime misure con il test a soglie*). Restano da verificare la ripetibilità (test-retest), il confronto con osservatori a visione normale e la scansione di β nell'interfaccia.
 
 ### Riferimenti tecnici consultati
 
@@ -297,7 +319,7 @@ Per rispettare YAGNI, le funzionalità seguenti non fanno parte dell'MVP. Ciascu
 | Riapplicazione su eventi (sblocco, cambio configurazione) | Si osserva una sovrascrittura reale della matrice |
 | Daltonizzazione classica come secondo modello | La variante a luminanza è insufficiente sui casi reali |
 | Test a soglie nell'app (stile CAD/CCT, display calibrato) | Dopo alcuni giorni d'uso serve stimare i parametri in modo sistematico (vedi *Misura e taratura personale (differita)*) |
-| Compito in cieco per affinare `β` | Dopo alcuni giorni d'uso si vuole scegliere `β` con un criterio oggettivo (vedi *Misura e taratura personale (differita)*) |
+| Compito in cieco con placebo attivo | Le differenze tra i `β` della scansione risultano ambigue (vedi *Misura e taratura personale (differita)*) |
 | Raccolta dei casi reali | Serve un dataset per valutare l'efficacia |
 | Riferimento clinico (CAD test o anomaloscopio) | Prima di investire nella taratura fine; serve a validare il test nell'app |
 | Calibrazione del display con colorimetro | Si avvia il test a soglie nell'app |
@@ -311,7 +333,7 @@ Questa fase affina la conoscenza della condizione dell'utente e la scelta di `β
 **Test a soglie (ridotto).** Il protocollo ha questi elementi.
 
 - Stimolo: una Landolt C con quattro orientamenti (risposta forzata a quattro scelte), formata da punti colorati su un campo di punti con rumore di luminanza dinamico. Come nel CAD, il rumore impedisce di risolvere il compito con la sola luminosità.
-- Direzioni: asse rosso-verde lungo le linee di confusione, direzione di controllo tritan (giallo-blu) e un blocco di controllo con il filtro acceso. Il blocco verifica che il rumore mascheri anche la luminanza introdotta dal filtro: se con il filtro la soglia migliora, il rumore è insufficiente.
+- Direzioni: asse rosso-verde lungo le linee di confusione, direzione di controllo tritan (giallo-blu) e un blocco di controllo con il filtro acceso. Il blocco di controllo misura l'efficacia del filtro nel compito: con il filtro la differenza rosso-verde diventa anche una differenza di luminanza, quindi la soglia attesa è più bassa.
 - Procedura: staircase con tre risposte corrette consecutive per scendere e un errore per salire (converge a circa il 79,4% di risposte corrette), da 8 a 10 inversioni, soglia come media delle ultime inversioni. Prove "catch" ad alto contrasto rilevano la disattenzione; si calcola un intervallo di confidenza e la misura si ripete in giorni diversi (test-retest).
 - Condizioni: il test azzera la matrice e fissa luminosità e modalità colore della finestra. Night Light e modalità lettura di MIUI vanno disattivati a mano prima di iniziare: l'app lo ricorda nella schermata iniziale. Un registro CSV salva per ogni prova direzione, contrasto, risposta, tempo di risposta e luminosità.
 - Conversione: dal triplet RGB (sRGB assunto) al contrasto dei coni con i fondamentali dei coni di Smith-Pokorny (quelli del diagramma di MacLeod-Boynton), applicati a XYZ CIE 1931. Non esiste una matrice esatta da XYZ a LMS: i fondamentali di Stockman-Sharpe e i primari misurati del display sono il passo successivo se serve più precisione. Primari e gamma del telefono non sono misurati, quindi il risultato è un **indice relativo**, non un contrasto assoluto.
@@ -319,9 +341,9 @@ Questa fase affina la conoscenza della condizione dell'utente e la scelta di `β
 
 Vantaggi: la misura avviene sul display reale, è ripetibile e non dipende dal filtro. Limiti: la precisione è quella della calibrazione del display; il confronto si basa su pochi osservatori; non esiste una soglia assoluta.
 
-Parametri attuali (provvisori): campo di 36×36 punti con variazione di luminanza di ±10%; sfondo grigio sRGB al 50%; prove di tipo catch ogni 8 prove, sull'asse S al 90% del contrasto massimo; contrasto limitato al 100% di cono e al gamut dello schermo; staircase con passo ×1.25, 10 inversioni (media delle ultime 6) e al massimo 200 prove per asse; le prove dei due assi sono alternate a caso.
+Parametri attuali (provvisori): campo di 36×36 punti con variazione di luminanza di ±10%; sfondo grigio sRGB al 50%; prove di tipo catch ogni 8 prove, sull'asse S al 90% del contrasto massimo; contrasto limitato al 100% di cono e al gamut dello schermo; staircase con passo ×1.25, 10 inversioni (media delle ultime 6) e al massimo 200 prove per asse; le prove dei due assi sono alternate a caso. La scansione di `β` usa 0, 0.05, 0.10, 0.15, 0.20 e 0.30 e misura solo l'asse rosso-verde.
 
-**Compito in cieco per affinare `β`.** Compiti a scelta forzata (ad esempio individuare il campione diverso tra un rosso e un verde di luminanza simile) si ripetono con `β` estratto a caso da un insieme di valori (ad esempio 0, 0.1, 0.15, 0.2 e 0.3) e con un **placebo attivo**: una trasformazione con un viraggio visibile simile ma senza accoppiamento con R−G. Un placebo `β = 0` non sarebbe cieco, perché il viraggio dei colori rivela quando il filtro è attivo. L'ordine è casuale e `β` non viene mostrato. Numero di prove per condizione e analisi (percentuale di risposte corrette per condizione con intervallo di confidenza): Da definire. La scelta finale di `β` spetta all'utente, tra i valori che non peggiorano le prestazioni.
+**Scansione di `β` per affinare la taratura.** La soglia rosso-verde misurata con il filtro è essa stessa la misura di efficacia. La scansione la misura a `β` = 0, 0.05, 0.10, 0.15, 0.20 e 0.30, in un ordine casuale diverso a ogni ripetizione e senza mostrare quale `β` è attivo; i valori si rivelano nei risultati, con per ciascuno la media geometrica delle ripetizioni e il miglioramento rispetto a `β` = 0. Ogni stima ha una dispersione di circa l'11%, quindi conviene ripetere la scansione in giorni diversi prima di decidere. La scelta finale di `β` spetta all'utente, tra i valori con soglia bassa e naturalezza accettabile. Il compito in cieco con placebo attivo (una trasformazione con un viraggio visibile simile ma senza accoppiamento con R−G) resta rinviato: serve solo se le differenze tra i `β` risultano ambigue.
 
 **Escluso volutamente.** La stima della gravità per inversione del modello di Machado, l'ottimizzazione di una matrice 3x3 e la procedura QUEST. Le prime due richiedono un modello di soglia validato con dati propri; la terza non aggiunge nulla allo staircase per un singolo utente. Si riprendono solo se il test a soglie mostra un limite concreto.
 
@@ -329,7 +351,7 @@ Parametri attuali (provvisori): campo di 36×36 punti con variazione di luminanz
 
 1. `feature/threshold-core`: Kotlin puro, con conversione colore, specifica dello stimolo, staircase e registro. Lo staircase si verifica con osservatori simulati a soglia nota, controllando la convergenza. Verificabile con unit test. Implementato nel package `measure` con `ConeSpace`, `Staircase` e `TrialLog`.
 2. `feature/threshold-screen`: schermata Compose con Canvas, luminosità e modalità colore della finestra, azzeramento della matrice durante il test. Da verificare sul dispositivo. Implementata con `LandoltStimulusGenerator` e `ThresholdSession` (Kotlin puro, verificati con unit test) e con `ThresholdTestViewModel`, `ThresholdTestScreen` e `ThresholdTestActivity` (non verificati qui). Si apre dal pulsante «Test a soglie» della schermata principale; il blocco di controllo con il filtro acceso misura solo l'asse rosso-verde.
-3. `feature/blind-task`: compito in cieco con placebo attivo e analisi. Da verificare sul dispositivo.
+3. `feature/beta-sweep`: scansione di `β` in ordine casuale con valori nascosti e sintesi per `β`. La logica (`BetaSweep`) è verificata con unit test; l'interfaccia è da verificare sul dispositivo.
 
 ### Valutazione dell'efficacia
 
@@ -417,7 +439,7 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 
 `feature/screen-color-applier`
 - [x] `ScreenColorApplier` e `ApplyResult`
-- [ ] `SurfaceFlingerColorApplier` via root (adattatore `libsu` da verificare sul dispositivo)
+- [x] `SurfaceFlingerColorApplier` via root (verificato sul dispositivo dal test a soglie)
 - [x] Test con shell finta
 
 `feature/settings-controller`
@@ -425,7 +447,7 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 - [x] `FilterController` e relativi test
 
 `feature/main-screen`
-- [ ] Plugin Compose e dipendenze Gradle (da verificare con la build)
+- [x] Plugin Compose e dipendenze Gradle (la build riesce)
 - [ ] `FilterViewModel` e `FilterScreen` (scritti, da verificare con build e dispositivo)
 - [ ] Stato "root non disponibile" (scritto, da verificare sul dispositivo)
 
@@ -443,7 +465,11 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 - [x] `LandoltStimulusGenerator`: campo di punti con C di Landolt e variazione di luminanza
 - [x] `ThresholdSession`: staircase alternati, prove catch e registro (osservatori simulati)
 - [x] `AppDependencies` e `FilterTheme` condivisi dalle schermate
-- [ ] `ThresholdTestViewModel`, `ThresholdTestScreen` e `ThresholdTestActivity` (scritti, da verificare con build e dispositivo)
+- [x] `ThresholdTestViewModel`, `ThresholdTestScreen` e `ThresholdTestActivity` (verificati sul dispositivo: test eseguito)
+
+`feature/beta-sweep`
+- [x] `BetaSweep`: ordine casuale e sintesi per `β` (media geometrica, miglioramento sul riferimento)
+- [ ] Scansione di `β` nell'interfaccia (da verificare sul dispositivo)
 
 ## Elenco file impattati
 
@@ -491,3 +517,5 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/ui/ThresholdTestActivity.kt`: nuovo, finestra a luminanza massima e modalità colore predefinita
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/LandoltStimulusTest.kt`: nuovo, test dello stimolo
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/ThresholdSessionTest.kt`: nuovo, test della sessione con osservatori simulati
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/BetaSweep.kt`: nuovo, ordine casuale e sintesi della scansione di `β`
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/BetaSweepTest.kt`: nuovo, test dell'ordine e della sintesi
