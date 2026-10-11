@@ -9,6 +9,9 @@ import com.luigiscialpi.colorblindnessfilter.system.LibsuRootShell
 import com.luigiscialpi.colorblindnessfilter.system.ScreenColorApplier
 import com.luigiscialpi.colorblindnessfilter.system.SurfaceFlingerColorApplier
 
+import com.luigiscialpi.colorblindnessfilter.data.TestSessionRepository
+import java.io.File
+
 /**
  * Cablaggio manuale delle dipendenze, condiviso dalle schermate: pochi oggetti non
  * giustificano un framework di DI. DataStore e shell principale di libsu sono già unici
@@ -20,4 +23,7 @@ class AppDependencies(context: Context) {
     val repository = SettingsRepository(context.applicationContext.filterSettingsDataStore)
     val applier: ScreenColorApplier = SurfaceFlingerColorApplier(shell)
     val controller = FilterController(applier, BootScriptWriter(shell))
+    val testSessionRepository = TestSessionRepository(
+        File(context.applicationContext.filesDir, "test_sessions"),
+    )
 }

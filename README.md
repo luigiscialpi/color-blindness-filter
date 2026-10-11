@@ -1,6 +1,6 @@
 Task relativo: nessun ticket — progetto personale (uso proprio, dispositivo con root)
 
-Stato del documento: **DRAFT, versione 13** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto, la decisione sul riavvio, il nucleo del test a soglie, la schermata del test, i primi risultati e la scansione di β. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
+Stato del documento: **DRAFT, versione 14** — aggiornato dopo lo spike A (matrice colore via SurfaceFlinger), la scelta di Magisk per il boot, la ricerca sugli strumenti di misura, il comportamento osservato di `service call`, il completamento del branch 3, la UI, lo script di avvio e il protocollo di misura ridotto, la decisione sul riavvio, il nucleo del test a soglie, la schermata del test, i primi risultati, la scansione di β, la persistenza dello storico dei risultati e la ripresa delle suite interrotte. Le parti ancora aperte sono marcate `TO DO`, `DRAFT` o `Da approfondire`.
 
 - Descrizione
 - Analisi
@@ -352,6 +352,7 @@ Parametri attuali (provvisori): campo di 36×36 punti con variazione di luminanz
 1. `feature/threshold-core`: Kotlin puro, con conversione colore, specifica dello stimolo, staircase e registro. Lo staircase si verifica con osservatori simulati a soglia nota, controllando la convergenza. Verificabile con unit test. Implementato nel package `measure` con `ConeSpace`, `Staircase` e `TrialLog`.
 2. `feature/threshold-screen`: schermata Compose con Canvas, luminosità e modalità colore della finestra, azzeramento della matrice durante il test. Da verificare sul dispositivo. Implementata con `LandoltStimulusGenerator` e `ThresholdSession` (Kotlin puro, verificati con unit test) e con `ThresholdTestViewModel`, `ThresholdTestScreen` e `ThresholdTestActivity` (non verificati qui). Si apre dal pulsante «Test a soglie» della schermata principale; il blocco di controllo con il filtro acceso misura solo l'asse rosso-verde.
 3. `feature/beta-sweep`: scansione di `β` in ordine casuale con valori nascosti e sintesi per `β`. La logica (`BetaSweep`) è verificata con unit test; l'interfaccia è da verificare sul dispositivo.
+4. `feature/test-history-and-resume`: persistenza dello storico dei risultati e dei log CSV su file JSON, ripresa dal punto di interruzione per le suite di test (in particolare la scansione di `β`) senza falsare la stima dei singoli blocchi, interfaccia della cronologia e consultazione delle prove precedenti.
 
 ### Valutazione dell'efficacia
 
@@ -471,6 +472,12 @@ Lo stesso piano come tracker di avanzamento, branch per branch.
 - [x] `BetaSweep`: ordine casuale e sintesi per `β` (media geometrica, miglioramento sul riferimento)
 - [ ] Scansione di `β` nell'interfaccia (da verificare sul dispositivo)
 
+`feature/test-history-and-resume`
+- [x] Persistenza sessione attiva e cronologia su file JSON (`TestSessionRepository`)
+- [x] Ripresa dal punto di interruzione a livello di blocco per suite e scansioni di `β`
+- [x] Schermata di cronologia dei test con dettagli, sintesi ed esportazione CSV
+- [x] Unit test su serializzazione, repository e ciclo di vita del ViewModel
+
 ## Elenco file impattati
 
 Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relativi test sono già presenti; gli altri sono proposti e vanno confermati branch per branch.
@@ -519,3 +526,9 @@ Elenco dei file del progetto. `ColorTransform`, `LuminanceShiftFilter` e i relat
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/ThresholdSessionTest.kt`: nuovo, test della sessione con osservatori simulati
 - `app/src/main/java/com/luigiscialpi/colorblindnessfilter/measure/BetaSweep.kt`: nuovo, ordine casuale e sintesi della scansione di `β`
 - `app/src/test/java/com/luigiscialpi/colorblindnessfilter/measure/BetaSweepTest.kt`: nuovo, test dell'ordine e della sintesi
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/TestSessionRecord.kt`: nuovo, modello dati dello snapshot e dei blocchi salvati
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/TestSessionJson.kt`: nuovo, serializzatore e parser JSON leggero in puro Kotlin
+- `app/src/main/java/com/luigiscialpi/colorblindnessfilter/data/TestSessionRepository.kt`: nuovo, persistenza su file JSON della sessione attiva e dello storico
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/TestSessionJsonTest.kt`: nuovo, test di serializzazione e parsing
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/data/TestSessionRepositoryTest.kt`: nuovo, test del repository e dello storico
+- `app/src/test/java/com/luigiscialpi/colorblindnessfilter/ui/ThresholdTestViewModelTest.kt`: nuovo, test del ViewModel per ripresa, abbandono e cronologia

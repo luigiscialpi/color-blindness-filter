@@ -24,6 +24,7 @@ class ThresholdTestActivity : ComponentActivity() {
                     applier = dependencies.applier,
                     controller = dependencies.controller,
                     repository = dependencies.repository,
+                    testSessionRepository = dependencies.testSessionRepository,
                 )
             }
         }
@@ -45,6 +46,12 @@ class ThresholdTestActivity : ComponentActivity() {
                     state = state,
                     onStart = viewModel::start,
                     onStartSweep = viewModel::startSweep,
+                    onResumeSession = viewModel::resumeActiveSession,
+                    onDiscardSession = viewModel::discardActiveSession,
+                    onOpenHistory = viewModel::openHistory,
+                    onBackToIntro = viewModel::backToIntro,
+                    onSelectHistorySession = viewModel::selectHistorySession,
+                    onDeleteHistorySession = viewModel::deleteHistorySession,
                     onAnswer = viewModel::onAnswer,
                     onCopyResults = ::copyResults,
                     onClose = ::finish,
@@ -53,8 +60,9 @@ class ThresholdTestActivity : ComponentActivity() {
         }
     }
 
-    private fun copyResults() {
+    private fun copyResults(customText: String? = null) {
         val clipboard = getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(ClipData.newPlainText("Risultati del test a soglie", viewModel.exportText()))
+        val textToCopy = customText ?: viewModel.exportText()
+        clipboard.setPrimaryClip(ClipData.newPlainText("Risultati del test a soglie", textToCopy))
     }
 }
